@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>LtL · Tạm ứng & Hoàn ứng</title>
+  <meta name="description" content="Quản lý tạm ứng, hoàn ứng và đề nghị thanh toán — Learn to Leap" />
+  <meta name="theme-color" content="#8a3f97" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="icons/favicon-32.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="LtL Hoàn ứng" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div class="app" id="app"><!-- render --></div>
+  <div id="modal-root"></div>
+  <div class="toast-wrap" id="toast-root"></div>
+
+  <script src="assets/utils.js"></script>
+  <script src="assets/db.js"></script>
+  <script src="assets/app.js"></script>
+  <script src="assets/ui.js"></script>
+  <script src="assets/docgen.js"></script>
+  <script src="assets/pdfgen.js"></script>
+  <script src="assets/screen-dashboard.js"></script>
+  <script src="assets/screen-advance.js"></script>
+  <script src="assets/screen-expenses.js"></script>
+  <script src="assets/screen-refund.js"></script>
+  <script src="assets/screen-events.js"></script>
+  <script src="assets/cloud.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
+  </script>
+</body>
+</html>

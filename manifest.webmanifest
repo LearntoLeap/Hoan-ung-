@@ -1,0 +1,19 @@
+{
+  "name": "Tạm ứng & Hoàn ứng — Learn to Leap",
+  "short_name": "LtL Hoàn ứng",
+  "description": "Quản lý tạm ứng, hoàn ứng và đề nghị thanh toán cho sự kiện — Learn to Leap",
+  "lang": "vi",
+  "dir": "ltr",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#faf4f9",
+  "theme_color": "#8a3f97",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

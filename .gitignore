@@ -1,0 +1,14 @@
+# Vercel
+.vercel
+
+# Claude Code / local tooling
+.claude
+
+# Separate project (robot code — keep in its own repo)
+robocon2026/
+
+# Dependencies & OS/editor cruft
+node_modules/
+Thumbs.db
+.DS_Store
+*.log
