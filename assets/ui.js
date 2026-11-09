@@ -26,6 +26,38 @@
     if (cb && App.inputCb[cb]) App.inputCb[cb](t, e);
   });
 
+  /* ---- Hoạ tiết sóng (SVG tự sinh) cho banner / thẻ tối / đăng nhập ---- */
+  App.waves = function (opts) {
+    opts = opts || {};
+    const n = opts.n || 26, w = 800, h = 500, seed = opts.seed || 1;
+    const cs = opts.colors || ['#ffffff'];
+    let r = seed * 9301 + 49297; const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+    const a1 = rnd() * 120 + 60, a2 = rnd() * 160 + 80, ph = rnd() * 6;
+    let paths = '';
+    for (let i = 0; i < n; i++) {
+      const k = i / n, y0 = h * (opts.y0 == null ? 0.15 : opts.y0) + k * h * (opts.spread || 0.9);
+      const p = (x) => (y0 + Math.sin(x / 140 + ph + k * 2.2) * a1 * (0.4 + k) + Math.cos(x / 230 + k * 3) * a2 * 0.35).toFixed(1);
+      paths += '<path d="M-20 ' + p(-20) + ' C200 ' + p(200) + ' 420 ' + p(420) + ' 600 ' + p(600) + ' S820 ' + p(820) + ' 840 ' + p(840) + '" stroke="' + cs[i % cs.length] +
+        '" stroke-opacity="' + (opts.op || 0.55) * (0.35 + 0.65 * Math.sin(Math.PI * k)) + '" stroke-width="' + (opts.sw || 2.2) + '" fill="none"/>';
+    }
+    return '<svg class="waves" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' + paths + '</svg>';
+  };
+  // minh hoạ chứng từ + đồng xu (thẻ chào mừng)
+  App.docArt = function () {
+    return '<svg class="obj" viewBox="0 0 200 200" aria-hidden="true"><defs>' +
+      '<linearGradient id="pa" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#f1e6ff"/></linearGradient>' +
+      '<linearGradient id="co" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset="1" stop-color="#f7a72a"/></linearGradient></defs>' +
+      '<rect x="52" y="34" width="96" height="124" rx="12" fill="#fff" opacity=".45" transform="rotate(-10 100 96)"/>' +
+      '<rect x="50" y="30" width="100" height="130" rx="12" fill="url(#pa)"/>' +
+      '<rect x="64" y="48" width="56" height="8" rx="4" fill="#c9a7ef"/><rect x="64" y="64" width="72" height="6" rx="3" fill="#e5d4f7"/>' +
+      '<rect x="64" y="76" width="64" height="6" rx="3" fill="#e5d4f7"/><rect x="64" y="88" width="70" height="6" rx="3" fill="#e5d4f7"/>' +
+      '<rect x="64" y="108" width="40" height="6" rx="3" fill="#e5d4f7"/><rect x="108" y="104" width="28" height="12" rx="4" fill="#ff4fa3"/>' +
+      '<circle cx="126" cy="138" r="18" fill="#7cd34a"/><path d="M118 138l6 6 11-12" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<g><ellipse cx="52" cy="150" rx="26" ry="8" fill="#d98a14"/><rect x="26" y="134" width="52" height="16" fill="#e89a1c"/><ellipse cx="52" cy="134" rx="26" ry="8" fill="url(#co)"/>' +
+      '<ellipse cx="52" cy="126" rx="26" ry="8" fill="#d98a14"/><rect x="26" y="110" width="52" height="16" fill="#e89a1c"/><ellipse cx="52" cy="110" rx="26" ry="8" fill="url(#co)"/>' +
+      '<text x="52" y="114" text-anchor="middle" font-size="10" font-weight="800" fill="#a45f00">đ</text></g></svg>';
+  };
+
   App.docSo = function (n) {
     const s = App.settings || {};
     return U.docSoLTL(n, { nghin: s.docNghin, hauTo: s.hauTo });

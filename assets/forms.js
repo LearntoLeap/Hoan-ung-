@@ -297,8 +297,7 @@
   }
   App.selectBare = selectBare;
   function kpi(ic, label, value, sub, cls) {
-    cls = cls || ['', 'c2', 'c3', 'c4'][String(ic).length % 4];
-    return '<div class="kpi lift ' + cls + '"><div class="l"><span class="ki">' + I(ic) + '</span>' + esc(label) + '</div><div class="v">' + value + '</div>' + (sub ? '<div class="s">' + sub + '</div>' : '') + '</div>';
+    return '<div class="kpi lift' + (cls ? ' ' + cls : '') + '"><div class="kb"><div class="l">' + esc(label) + '</div><div class="v">' + value + '</div>' + (sub ? '<div class="s">' + sub + '</div>' : '') + '</div><span class="ki">' + I(ic) + '</span></div>';
   }
   App.kpi = kpi;
 

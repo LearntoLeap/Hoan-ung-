@@ -1,7 +1,7 @@
 /* Service worker — Learn to Leap · Tạm ứng & Hoàn ứng
    Offline-first: precache app shell, runtime-cache heavy libs on first use. */
 'use strict';
-const VERSION = 'ltl-v21';
+const VERSION = 'ltl-v22';
 const CORE = 'ltl-core-' + VERSION;
 const RUNTIME = 'ltl-rt-' + VERSION;
 

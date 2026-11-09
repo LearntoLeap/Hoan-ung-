@@ -42,23 +42,41 @@
   /* ----------------------- Hồ sơ cá nhân ----------------------- */
   App.screens['ca-nhan'] = function (root) {
     const s = App.settings, u = App.cloud.user || {};
-    root.innerHTML = App.pageHead('Hồ sơ cá nhân', 'Thông tin này được điền sẵn vào mọi phiếu đề nghị bạn lập.') +
-      '<div class="grid g2">' +
-      '<div class="card"><div class="card-h"><div class="t">' + I('user') + 'Người đề nghị</div></div><div class="card-b"><div class="fgrid c2">' +
+    const name = s.hoTen || u.email || 'Tài khoản';
+    const ini = String(name).trim().split(/\s+/).slice(-2).map((w) => w.charAt(0)).join('').toUpperCase();
+    const acc = String(s.soTK || '').replace(/\s+/g, '');
+    const accFmt = acc ? acc.replace(/(.{4})/g, '$1 ').trim() : '•••• •••• •••• ••••';
+    const docs = App.data.docs;
+    root.innerHTML =
+      '<div class="pf-banner">' + App.waves({ seed: 5, colors: ['#ffffff', '#ffc2e6', '#c7b2ff'], op: 0.6, n: 40, sw: 2.4, y0: -0.1, spread: 1.2 }) + '</div>' +
+      '<div class="pf-card"><span class="pf-av">' + esc(ini) + '</span><div style="min-width:0"><h2>' + esc(name) + '</h2><p>' + esc([s.chucVu, s.boPhan].filter(Boolean).join(' · ') || 'Cập nhật chức vụ, bộ phận bên dưới') + '</p></div>' +
+      '<div class="seg"><a class="btn ghost sm" href="#/tam-ung" style="text-transform:none">' + I('file') + docs.length + ' phiếu</a><a class="btn ghost sm" href="#/chi-tieu" style="text-transform:none">' + I('receipt') + App.data.expenses.length + ' khoản chi</a>' +
+      (App.isAdmin() ? '<span class="badge accent" style="align-self:center">Quản trị</span>' : '') + '</div></div>' +
+      '<div class="grid g3">' +
+      '<div class="card"><div class="card-h"><h3>Thông tin người đề nghị</h3></div><div class="card-b">' +
       ui.text('pf-hoTen', 'Họ và tên', s.hoTen, { req: true }) + ui.text('pf-tenNgan', 'Tên ngắn (cột "Người tham gia")', s.tenNgan, { ph: App.lastName(s.hoTen) || 'VD: Giáp' }) +
       ui.text('pf-boPhan', 'Bộ phận', s.boPhan, { list: 'pf-dl' }) + ui.datalist('pf-dl', s.boPhanList) + ui.text('pf-chucVu', 'Chức vụ', s.chucVu) +
-      '</div></div></div>' +
-      '<div class="card"><div class="card-h"><div class="t">' + I('building') + 'Tài khoản nhận tiền</div></div><div class="card-b"><div class="fgrid c2">' +
-      '<div class="sall">' + ui.text('pf-tenTK', 'Tên tài khoản', s.tenTK, { ph: s.hoTen }) + '</div>' +
-      ui.text('pf-soTK', 'Số tài khoản', s.soTK) + ui.text('pf-nganHang', 'Ngân hàng', s.nganHang, { ph: 'VD: MB Bank' }) +
-      '</div></div></div>' +
-      '<div class="card span2"><div class="card-h"><div class="t">' + I('shield') + 'Đăng nhập & đồng bộ</div></div><div class="card-b">' +
-      '<div class="kv"><div class="k">Email đăng nhập</div><div class="v">' + esc(u.email || '') + '</div></div>' +
-      '<div class="kv"><div class="k">Quyền</div><div class="v">' + (App.isAdmin() ? '<span class="badge accent">Quản trị — xem được mọi tài khoản</span>' : '<span class="badge out">Người dùng</span>') + '</div></div>' +
+      '<button class="btn block" data-act="saveProfile">' + I('check') + 'Lưu hồ sơ</button></div></div>' +
+      '<div class="card"><div class="card-h"><h3>Tài khoản nhận tiền</h3></div><div class="card-b">' +
+      '<div class="bank-card">' + App.waves({ seed: 9, colors: ['#ff4fa3', '#9d6bff', '#4fc3ff'], op: 0.45, n: 22 }) +
+      '<div class="row" style="justify-content:space-between">' + I('wallet', 22) + '<b style="font-size:13px;opacity:.85">' + esc(s.nganHang || 'Ngân hàng') + '</b></div>' +
+      '<div class="no">' + esc(accFmt) + '</div><div class="bt"><div>Chủ tài khoản<b>' + esc(s.tenTK || s.hoTen || '—') + '</b></div></div><span class="mk"><i></i><i></i></span></div>' +
+      '<div class="mt16">' + ui.text('pf-tenTK', 'Tên tài khoản', s.tenTK, { ph: s.hoTen }) +
+      '<div class="fgrid c2">' + ui.text('pf-soTK', 'Số tài khoản', s.soTK, { cb: 'pfCard' }) + ui.text('pf-nganHang', 'Ngân hàng', s.nganHang, { ph: 'VD: MB Bank', cb: 'pfCard' }) + '</div></div></div></div>' +
+      '<div class="card"><div class="card-h"><h3>Đăng nhập &amp; đồng bộ</h3></div><div class="card-b">' +
+      '<div class="kv"><div class="k">Email</div><div class="v">' + esc(u.email || '') + '</div></div>' +
+      '<div class="kv"><div class="k">Quyền</div><div class="v">' + (App.isAdmin() ? '<span class="badge accent">Quản trị</span>' : '<span class="badge out">Người dùng</span>') + '</div></div>' +
       '<div class="kv"><div class="k">Đồng bộ gần nhất</div><div class="v">' + esc(App.cloud.lastSync ? U.fmtDateTime(App.cloud.lastSync) : '—') + '</div></div>' +
-      '<div class="btn-row mt12" style="max-width:560px"><button class="btn out" data-act="syncNow">' + I('refresh') + 'Đồng bộ ngay</button><button class="btn out" data-act="changePassword">' + I('key') + 'Đổi mật khẩu</button><button class="btn danger-out" data-act="logout">' + I('logout') + 'Đăng xuất</button></div>' +
-      '</div></div></div>' +
-      '<div class="row mt16"><button class="btn" data-act="saveProfile">' + I('check') + 'Lưu hồ sơ</button></div>';
+      '<div class="kv"><div class="k">Thùng rác</div><div class="v"><a href="#/thung-rac">' + (App.trashCount || 0) + ' mục</a></div></div>' +
+      '<div class="stack mt16" style="gap:8px"><button class="btn out block" data-act="syncNow">' + I('refresh') + 'Đồng bộ ngay</button><button class="btn out block" data-act="changePassword">' + I('key') + 'Đổi mật khẩu</button>' +
+      '<button class="btn danger-out block" data-act="logout">' + I('logout') + 'Đăng xuất</button></div></div></div>' +
+      '</div>';
+  };
+  App.inputCb.pfCard = function () {
+    const c = document.querySelector('.bank-card'); if (!c) return;
+    const acc = App.val('pf-soTK').replace(/\s+/g, '');
+    c.querySelector('.no').textContent = acc ? acc.replace(/(.{4})/g, '$1 ').trim() : '•••• •••• •••• ••••';
+    c.querySelector('.row b').textContent = App.val('pf-nganHang') || 'Ngân hàng';
   };
 
   /* ----------------------- Cấu hình mẫu phiếu ----------------------- */

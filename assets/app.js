@@ -222,6 +222,8 @@
     if (e.key === 'Escape') {
       const pop = document.querySelector('.menu-pop.open');
       if (pop) { pop.classList.remove('open'); return; }
+      const cf = document.getElementById('cfg'); if (cf && cf.classList.contains('open')) { cf.classList.remove('open'); return; }
+      if (document.body.classList.contains('nav-open')) { document.body.classList.remove('nav-open'); return; }
       if (document.querySelector('#modal-root .overlay')) closeSheet();
     }
   });
@@ -354,74 +356,176 @@
   function isAdmin() { return !!(App.cloud && App.cloud.isAdmin); }
   App.isAdmin = isAdmin;
 
-  function navHTML() {
-    const cur = App.route.name;
-    const items = MENU.filter((m) => !m.admin || isAdmin());
-    const cnt = (m) => m.trash && App.trashCount ? '<span class="cnt">' + App.trashCount + '</span>' : '';
-    const link = (m) => m.act
-      ? '<button class="nav-a" data-act="' + m.act + '">' + icon(m.ic) + '<span>' + m.label + '</span></button>'
-      : '<a class="nav-a' + (isActive(m.r, cur) ? ' on' : '') + '" href="#/' + m.r + '">' + icon(m.ic) + '<span>' + m.label + '</span>' + cnt(m) + '</a>';
-    return '<nav class="nav" aria-label="Điều hướng chính"><div class="nav-scroll">' + items.map(link).join('') + '</div>' +
-      '<div class="nav-more"><button class="nav-a' + (MENU_MORE.some((m) => m.r && m.r === cur) ? ' on' : '') + '" data-act="toggleMore" aria-haspopup="true">' + icon('more') + '<span>Thêm</span>' + (App.trashCount ? '<span class="cnt">' + App.trashCount + '</span>' : '') + '</button>' +
-      '<div class="menu-pop" id="more-pop">' + MENU_MORE.map(link).join('') + '</div></div></nav>';
+  /* ---------- Tuỳ chỉnh giao diện (lưu trên máy) ---------- */
+  const UI_DEF = { accent: 'tim', side: 'white', fixed: '1', mini: '0', motion: '1' };
+  function uiPrefs() { try { return Object.assign({}, UI_DEF, JSON.parse(localStorage.getItem('ltl_ui') || '{}')); } catch (e) { return Object.assign({}, UI_DEF); } }
+  function applyUI() {
+    const p = uiPrefs(), h = document.documentElement;
+    if (p.accent === 'tim') h.removeAttribute('data-accent'); else h.setAttribute('data-accent', p.accent);
+    h.setAttribute('data-side', p.side); h.setAttribute('data-fixed', p.fixed); h.setAttribute('data-mini', p.mini); h.setAttribute('data-motion', p.motion);
   }
-  function bottomNavHTML() {
-    const cur = App.route.name;
-    const it = (r) => { const m = MENU.find((x) => x.r === r); return '<a class="' + (isActive(r, cur) ? 'on' : '') + '" href="#/' + r + '"><span class="bi">' + icon(m.ic) + '</span>' + m.label + '</a>'; };
-    const moreOn = !BNAV.some((r) => isActive(r, cur));
-    return '<nav class="bnav" aria-label="Điều hướng nhanh">' + BNAV.map(it).join('') +
-      '<button class="' + (moreOn ? 'on' : '') + '" data-act="openMoreSheet"><span class="bi">' + icon('grid4') + '</span>Thêm</button></nav>';
-  }
-  function openMoreSheet() {
-    const cur = App.route.name;
-    const items = MENU.filter((m) => !BNAV.includes(m.r) && (!m.admin || isAdmin())).concat(MENU_MORE);
-    const tile = (m) => {
-      const inner = '<span class="mi">' + icon(m.ic, 20) + '</span>' + m.label + (m.trash && App.trashCount ? ' (' + App.trashCount + ')' : '');
-      return m.act ? '<button data-act="' + m.act + '">' + inner + '</button>' : '<a class="' + (isActive(m.r, cur) ? 'on' : '') + '" href="#/' + m.r + '">' + inner + '</a>';
-    };
-    const ov = openSheet(App.sheetHead('Tất cả chức năng') + '<div class="menu-grid">' + items.map(tile).join('') + '</div>' +
-      '<div class="btn-row mt16"><button class="btn out" data-act="toggleTheme">' + icon(App.isDark() ? 'sun' : 'moon') + (App.isDark() ? 'Nền sáng' : 'Nền tối') + '</button>' +
-      '<button class="btn danger-out" data-act="logout">' + icon('logout') + 'Đăng xuất</button></div>');
-    ov.addEventListener('click', (e) => { if (e.target.closest('a,[data-act=downloadBlank],[data-act=exportData],[data-act=toggleTheme]')) closeSheet(ov); });
-  }
-  function isActive(r, cur) {
-    if (r === cur) return true;
-    if (cur === 'phieu') {
-      const d = App.route.parts[1] === 'moi' ? { type: App.route.parts[2] } : App.data.docs.find((x) => x.id === App.route.parts[1]);
-      const map = { TU: 'tam-ung', HU: 'hoan-ung', TT: 'thanh-toan' };
-      return !!(d && map[d.type] === r);
-    }
-    return false;
-  }
+  function setUI(k, v) { const p = uiPrefs(); p[k] = v; try { localStorage.setItem('ltl_ui', JSON.stringify(p)); } catch (e) {} applyUI(); }
+  applyUI();
+  App.uiPrefs = uiPrefs;
 
-  function headerHTML() {
-    const s = App.settings || {};
-    const u = App.cloud && App.cloud.user;
+  const ACCENTS = [['tim', '#7928ca', '#ff0080', 'Tím LtL'], ['hong', '#d6336c', '#ff8a65', 'Hồng cam'], ['xanh', '#2152ff', '#21d4fd', 'Xanh dương'],
+    ['luc', '#17ad37', '#98ec2d', 'Xanh lá'], ['cam', '#f53939', '#fbcf33', 'Cam'], ['toi', '#141727', '#3a416f', 'Xanh đen']];
+  const GROUPS = [
+    { label: 'Quản lý', items: ['', 'tam-ung', 'chi-tieu', 'hoan-ung', 'thanh-toan', 'su-kien', 'bao-cao'] },
+    { label: 'Tài khoản', items: ['ca-nhan', 'tai-khoan', 'thung-rac', 'cai-dat', 'huong-dan'] },
+  ];
+  const ALL = MENU.concat(MENU_MORE);
+  const mOf = (r) => ALL.find((m) => m.r === r);
+  App.titleOf = (name) => { const m = mOf(name); if (m) return m.label; if (name === 'phieu') return 'Phiếu đề nghị'; return 'Trang'; };
+
+  function sidebarHTML() {
+    let s = '<aside class="sidenav" id="sidenav" aria-label="Điều hướng chính">' +
+      '<a class="sn-brand" href="#/"><span class="bm"><img src="assets/logo-mark.png" alt="Learn to Leap"></span><span class="bt"><b>Tạm ứng &amp; Hoàn ứng</b><small>Learn to Leap</small></span></a>' +
+      '<div class="sn-hr"></div><div class="sn-scroll" id="sn-scroll"><span class="sn-pill" id="sn-pill"></span>';
+    GROUPS.forEach((g) => {
+      s += '<div class="sn-group">' + g.label + '</div>';
+      g.items.forEach((r) => {
+        const m = mOf(r); if (!m || (m.admin && !isAdmin())) return;
+        s += '<a class="sn-link" data-r="' + r + '" href="#/' + r + '" title="' + m.label + '"><span class="sn-ic">' + icon(m.ic) + '</span><span class="sl">' + m.label + '</span>' +
+          (m.trash ? '<span class="cnt" id="trash-cnt"' + (App.trashCount ? '' : ' hidden') + '>' + (App.trashCount || '') + '</span>' : '') + '</a>';
+      });
+    });
+    s += '</div><div class="sn-help"><span class="hi">' + icon('help') + '</span><b>Cần trợ giúp?</b><p>Xem hướng dẫn lập phiếu &amp; quyết toán.</p>' +
+      '<a class="btn white sm block" href="#/huong-dan">Hướng dẫn</a></div>' +
+      '<div class="sn-out"><button class="btn ghost sm block" data-act="logout" style="justify-content:flex-start;text-transform:none;font-size:13px">' + icon('logout') + '<span class="sl">Đăng xuất</span></button></div></aside>' +
+      '<div class="nav-backdrop" data-act="closeNav"></div>';
+    return s;
+  }
+  function topbarHTML() {
+    const s = App.settings || {}, u = App.cloud && App.cloud.user;
     const name = s.hoTen || (u && u.user_metadata && u.user_metadata.full_name) || (u && u.email) || 'Tài khoản';
     const role = (isAdmin() ? 'Quản trị · ' : '') + (s.boPhan || (u && u.email) || '');
-    const dark = App.isDark();
     const ini = String(name).trim().split(/\s+/).slice(-2).map((w) => w.charAt(0)).join('').toUpperCase() || 'U';
-    return '<header class="hdr"><div class="container hdr-in">' +
-      '<a class="brand" href="#/"><span class="brand-mark"><img src="assets/logo-mark.png" alt="Learn to Leap"></span><span class="brand-t"><b>Tạm ứng &amp; <span class="grad-text">Hoàn ứng</span></b><small>Learn to Leap</small></span></a>' +
-      navHTML() +
-      '<div class="hdr-right">' +
+    const dark = App.isDark();
+    return '<header class="topbar" id="topbar">' +
+      '<button class="tb-btn tb-menu" data-act="openNav" aria-label="Mở menu">' + icon('menu') + '</button>' +
+      '<div class="tb-title"><div class="crumb">Trang <span>/</span> <b id="tb-crumb"></b></div><h6 id="tb-title"></h6></div>' +
+      '<div class="tb-right">' +
+      '<div class="gsearch" id="gsearch">' + icon('search') + '<input id="gs-in" type="search" placeholder="Tìm phiếu, khoản chi…" autocomplete="off" aria-label="Tìm kiếm"><kbd class="hide-m">Ctrl K</kbd><div class="gs-pop" id="gs-pop"></div></div>' +
+      '<button class="tb-btn hide-d" data-act="openSearch" aria-label="Tìm kiếm">' + icon('search') + '</button>' +
+      '<button class="tb-btn" data-act="syncNow" title="Đồng bộ dữ liệu" aria-label="Đồng bộ"><span class="sync-dot" id="sync-dot"></span></button>' +
+      '<button class="tb-btn" data-act="toggleTheme" id="tb-theme" title="Đổi nền sáng / tối" aria-label="Đổi nền sáng / tối">' + icon(dark ? 'sun' : 'moon') + '</button>' +
+      '<button class="tb-btn" data-act="openCfg" title="Tuỳ chỉnh giao diện" aria-label="Tuỳ chỉnh giao diện">' + icon('settings') + '</button>' +
       '<a class="who" href="#/ca-nhan" title="Hồ sơ cá nhân"><span class="av">' + esc(ini) + '</span><span class="wt"><b>' + esc(name) + '</b><small>' + esc(role) + '</small></span></a>' +
-      '<button class="btn out icon" data-act="syncNow" title="Đồng bộ dữ liệu" aria-label="Đồng bộ"><span class="sync-dot" id="sync-dot"></span></button>' +
-      '<button class="btn out icon" data-act="toggleTheme" title="' + (dark ? 'Chuyển sang nền sáng' : 'Chuyển sang nền tối') + '" aria-label="Đổi giao diện sáng/tối">' + icon(dark ? 'sun' : 'moon') + '</button>' +
-      '<button class="btn out icon hide-m" data-act="logout" title="Đăng xuất" aria-label="Đăng xuất">' + icon('logout') + '</button>' +
-      '</div></div></header>';
+      '</div></header>';
   }
+  function bottomNavHTML() {
+    const it = (r) => { const m = mOf(r); return '<a data-r="' + r + '" href="#/' + r + '"><span class="bi">' + icon(m.ic) + '</span>' + m.label + '</a>'; };
+    return '<nav class="bnav" aria-label="Điều hướng nhanh">' + BNAV.map(it).join('') + '<button data-act="openNav" data-r="_more"><span class="bi">' + icon('grid4') + '</span>Thêm</button></nav>';
+  }
+  function cfgHTML() {
+    const p = uiPrefs();
+    const opt = (k, v, l) => '<button class="' + (p[k] === v ? 'on' : '') + '" data-act="setUI:' + k + '=' + v + '">' + l + '</button>';
+    const sw = (k, l, d) => '<label class="switch"><input type="checkbox" data-ui="' + k + '"' + (p[k] === '1' ? ' checked' : '') + '>' + l + '</label>' + (d ? '<p>' + d + '</p>' : '');
+    return '<div class="cfg-h"><div><b>Tuỳ chỉnh giao diện</b><small>Chọn màu, kiểu thanh bên, hiệu ứng.</small></div><button class="tb-btn" data-act="closeCfg" style="margin-left:auto" aria-label="Đóng">' + icon('x') + '</button></div>' +
+      '<div class="sn-hr"></div><div class="cfg-b">' +
+      '<h6>Màu nhấn</h6><div class="swatches">' + ACCENTS.map((a) => '<button title="' + a[3] + '" aria-label="' + a[3] + '" class="' + (p.accent === a[0] ? 'on' : '') + '" data-act="setUI:accent=' + a[0] + '" style="background:linear-gradient(310deg,' + a[1] + ',' + a[2] + ')"></button>').join('') + '</div>' +
+      '<h6>Kiểu thanh bên</h6><p>Chọn nền cho thanh menu bên trái.</p><div class="opt-row">' + opt('side', 'white', 'Trắng') + opt('side', 'glass', 'Trong suốt') + opt('side', 'dark', 'Tối') + '</div>' +
+      '<h6>Bố cục</h6>' + sw('mini', 'Thu gọn thanh bên (chỉ icon)') + sw('fixed', 'Cố định thanh trên khi cuộn') +
+      '<h6>Hiệu ứng</h6>' + sw('motion', 'Hiệu ứng chuyển cảnh & chuyển động', 'Tắt nếu máy chậm.') +
+      '<h6>Chế độ</h6>' + '<label class="switch"><input type="checkbox" id="cfg-dark"' + (App.isDark() ? ' checked' : '') + '>Nền tối</label>' +
+      '<div class="btn-row mt24"><button class="btn sec" data-act="resetUI">Khôi phục mặc định</button></div></div>';
+  }
+
+  // Dựng khung 1 lần; các lần chuyển trang chỉ thay nội dung + trạng thái menu
+  function ensureShell() {
+    if (document.getElementById('screen') && document.getElementById('sidenav') && App._shellUser === App.user && App._shellAdmin === isAdmin()) return false;
+    const app = document.getElementById('app');
+    app.innerHTML = '<div class="layout">' + sidebarHTML() +
+      '<div class="main-wrap">' + topbarHTML() +
+      '<main class="main"><div class="container" id="screen"></div></main>' +
+      '<footer class="foot"><div class="fl"><img src="assets/logo-ltl-sm.png" alt="Learn to Leap"><span>© ' + new Date().getFullYear() + ' Learn to Leap · Tạm ứng · Hoàn ứng · Thanh toán (mẫu 01-TT/LTL)</span></div>' +
+      '<div class="fr"><a href="#/huong-dan">Hướng dẫn</a><a href="#/bao-cao">Báo cáo</a><a href="#/cai-dat">Cấu hình</a></div></footer></div>' +
+      bottomNavHTML() + '<button class="cfg-fab" data-act="openCfg" aria-label="Tuỳ chỉnh giao diện">' + icon('settings') + '</button>' +
+      '<aside class="cfg" id="cfg" aria-label="Tuỳ chỉnh giao diện"></aside></div>';
+    App._shellUser = App.user; App._shellAdmin = isAdmin();
+    bindSearch();
+    return true;
+  }
+  function activeRoute() {
+    const cur = App.route.name;
+    if (cur === 'phieu') {
+      const d = App.route.parts[1] === 'moi' ? { type: App.route.parts[2] } : App.data.docs.find((x) => x.id === App.route.parts[1]);
+      return ({ TU: 'tam-ung', HU: 'hoan-ung', TT: 'thanh-toan' })[d && d.type] || 'tam-ung';
+    }
+    return cur;
+  }
+  function isActive(r) { return r === activeRoute(); }
+  function updateShell() {
+    const ar = activeRoute();
+    document.querySelectorAll('.sn-link').forEach((a) => a.classList.toggle('on', a.getAttribute('data-r') === ar));
+    document.querySelectorAll('.bnav [data-r]').forEach((a) => a.classList.toggle('on', a.getAttribute('data-r') === ar || (a.getAttribute('data-r') === '_more' && !BNAV.includes(ar))));
+    const title = App.route.name === 'phieu' ? (App.route.parts[1] === 'moi' ? 'Lập phiếu mới' : 'Chi tiết phiếu') : App.titleOf(App.route.name);
+    const c = document.getElementById('tb-crumb'); if (c) c.textContent = App.titleOf(ar);
+    const t = document.getElementById('tb-title'); if (t) t.textContent = title;
+    const tc = document.getElementById('trash-cnt'); if (tc) { tc.textContent = App.trashCount || ''; tc.hidden = !App.trashCount; }
+    const who = document.querySelector('.topbar .who');
+    if (who) { const tmp = document.createElement('div'); tmp.innerHTML = topbarHTML(); const nw = tmp.querySelector('.who'); if (nw) who.innerHTML = nw.innerHTML; }
+    const th = document.getElementById('tb-theme'); if (th) th.innerHTML = icon(App.isDark() ? 'sun' : 'moon');
+    document.title = title + ' · LtL Tạm ứng & Hoàn ứng';
+    movePill();
+    document.body.classList.remove('nav-open');
+  }
+  // "viên" nền trượt tới mục menu đang chọn
+  function movePill() {
+    const pill = document.getElementById('sn-pill'), on = document.querySelector('.sn-link.on');
+    if (!pill) return;
+    if (!on) { pill.style.opacity = '0'; return; }
+    pill.style.opacity = '1';
+    pill.style.height = on.offsetHeight + 'px';
+    pill.style.transform = 'translateY(' + on.offsetTop + 'px)';
+  }
+  window.addEventListener('resize', () => movePill());
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => movePill());
+  window.addEventListener('load', () => setTimeout(movePill, 50));
+  window.addEventListener('scroll', () => { const t = document.getElementById('topbar'); if (t) t.classList.toggle('scrolled', window.scrollY > 8); }, { passive: true });
+
+  /* ---------- Tìm kiếm toàn cục ---------- */
+  function bindSearch() {
+    const inp = document.getElementById('gs-in'), pop = document.getElementById('gs-pop');
+    if (!inp) return;
+    let hl = -1;
+    const run = () => {
+      const q = U.normText(inp.value.trim());
+      if (!q) { pop.classList.remove('open'); return; }
+      const D = App.Docs, res = [];
+      App.data.docs.forEach((d) => { if (U.normText([d.soPhieu, d.noiDung, d.nguoiDeNghi, U.groupThousand(D.total(d))].join(' ')).includes(q)) res.push({ g: 'Phiếu', ic: D.TYPES[d.type].ic, href: '#/phieu/' + d.id, t: d.soPhieu + ' · ' + (d.noiDung || ''), s: D.TYPES[d.type].label + ' · ' + U.groupThousand(D.total(d)) + ' đ' }); });
+      App.data.expenses.forEach((e) => { if (U.normText([e.content, e.ghiChu, e.participants, U.groupThousand(e.amount)].join(' ')).includes(q)) res.push({ g: 'Khoản chi', ic: 'receipt', href: '#/chi-tieu/' + e.eventId, t: e.content, s: U.fmtDate(e.date) + ' · ' + U.groupThousand(e.amount) + ' đ' }); });
+      App.data.events.forEach((e) => { if (U.normText(e.name).includes(q)) res.push({ g: 'Sự kiện', ic: 'calendar', href: '#/chi-tieu/' + e.id, t: e.name, s: e.date ? U.fmtDate(e.date) : '' }); });
+      ALL.forEach((m) => { if (m.r != null && U.normText(m.label).includes(q) && (!m.admin || isAdmin())) res.push({ g: 'Trang', ic: m.ic, href: '#/' + m.r, t: m.label, s: 'Mở trang' }); });
+      hl = -1;
+      if (!res.length) { pop.innerHTML = '<div class="ge">Không tìm thấy “' + esc(inp.value) + '”</div>'; pop.classList.add('open'); return; }
+      let g = '', h = '';
+      res.slice(0, 14).forEach((r) => { if (r.g !== g) { g = r.g; h += '<div class="gh">' + g + '</div>'; } h += '<a href="' + r.href + '"><span class="gi">' + icon(r.ic) + '</span><span style="min-width:0"><b>' + esc(r.t) + '</b><small>' + esc(r.s) + '</small></span></a>'; });
+      pop.innerHTML = h; pop.classList.add('open');
+    };
+    inp.addEventListener('input', run);
+    inp.addEventListener('focus', run);
+    inp.addEventListener('keydown', (e) => {
+      const links = pop.querySelectorAll('a');
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); hl = (hl + (e.key === 'ArrowDown' ? 1 : -1) + links.length) % links.length; links.forEach((a, i) => a.classList.toggle('hl', i === hl)); }
+      else if (e.key === 'Enter' && links.length) { (links[hl] || links[0]).click(); }
+      else if (e.key === 'Escape') { inp.value = ''; pop.classList.remove('open'); inp.blur(); e.stopPropagation(); }
+    });
+    pop.addEventListener('click', (e) => { if (e.target.closest('a')) { inp.value = ''; pop.classList.remove('open'); document.getElementById('gsearch').classList.remove('open'); } });
+    document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#gsearch') && !e.target.closest('[data-act=openSearch]')) { pop.classList.remove('open'); document.getElementById('gsearch') && document.getElementById('gsearch').classList.remove('open'); } });
+  }
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && document.getElementById('gs-in')) { e.preventDefault(); App.actions.openSearch(); }
+  });
 
   function render(anim) {
     Object.values(App.charts).forEach((c) => { try { c.destroy(); } catch (e) {} });
     App.charts = {};
-    const app = document.getElementById('app');
-    if (!App.user) { if (App.screens.login) App.screens.login(app); return; }
-    app.innerHTML = headerHTML() +
-      '<main class="main"><div class="container' + (anim ? ' stagger' : '') + '" id="screen"></div></main>' +
-      '<footer class="foot"><div class="container"><img src="assets/logo-ltl-sm.png" alt="Learn to Leap"><span>Tạm ứng · Hoàn ứng · Thanh toán theo mẫu 01-TT/LTL. Mỗi tài khoản chỉ xem dữ liệu của chính mình.</span></div></footer>' +
-      bottomNavHTML();
+    if (!App.user) { App._shellUser = null; if (App.screens.login) App.screens.login(document.getElementById('app')); return; }
+    ensureShell();
     const screen = document.getElementById('screen');
+    screen.className = 'container' + (anim && uiPrefs().motion !== '0' ? ' stagger' : '');
     const name = App.route.name;
     if (App.Sel) App.Sel.reset();
     const R = App.screens[name === '' ? 'dashboard' : name];
@@ -432,7 +536,22 @@
       screen.innerHTML = '<div class="card"><div class="empty"><div class="eic">' + icon('alert') + '</div><div class="et">Không tìm thấy trang</div>' +
         '<div class="es">Đường dẫn không tồn tại.</div><a class="btn" href="#/">Về Tổng quan</a></div></div>';
     }
+    updateShell();
+    if (anim) countUp(screen);
     if (App.cloud) App.cloud.updateBadge();
+  }
+  // số liệu chạy từ 0 lên khi mở trang
+  function countUp(root) {
+    if (uiPrefs().motion === '0') return;
+    root.querySelectorAll('.kpi .v, .stat4 .sv, .hstats b').forEach((el) => {
+      const txt = el.textContent; const m = txt.match(/^(−|-)?([\d.]+)(.*)$/);
+      if (!m) return; const target = U.toNumber(m[2]); if (!target || target < 10) return;
+      const t0 = performance.now(), dur = 900;
+      const step = (t) => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+        el.firstChild && el.firstChild.nodeType === 3 ? (el.firstChild.nodeValue = (m[1] || '') + U.groupThousand(Math.round(target * e)) + m[3]) : null;
+        if (k < 1) requestAnimationFrame(step); };
+      if (el.firstChild && el.firstChild.nodeType === 3) requestAnimationFrame(step);
+    });
   }
   App.render = render;
   function errorBox(e) {
@@ -444,7 +563,7 @@
   }
   // hiệu ứng gợn sóng khi bấm nút / mục menu
   document.addEventListener('pointerdown', (e) => {
-    const b = e.target.closest('.btn,.nav-a,.bnav a,.bnav button,.catchip,.menu-grid a,.menu-grid button,.fab,.seg button');
+    const b = e.target.closest('.btn,.sn-link,.tb-btn,.kpi,.bnav a,.bnav button,.catchip,.menu-grid a,.menu-grid button,.fab,.seg button');
     if (!b || b.disabled) return;
     const r = b.getBoundingClientRect(); const s = Math.max(r.width, r.height);
     const sp = document.createElement('span'); sp.className = 'ripple';
@@ -499,6 +618,22 @@
     render();
   };
 
+  // công tắc trong bảng tuỳ chỉnh
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.matches && t.matches('[data-ui]')) {
+      setUI(t.getAttribute('data-ui'), t.checked ? '1' : '0');
+      setTimeout(movePill, 320);
+    } else if (t.id === 'cfg-dark') {
+      try { localStorage.setItem('ltl_theme', t.checked ? 'dark' : 'light'); } catch (er) {}
+      applyTheme(); render();
+    }
+  });
+  document.addEventListener('pointerdown', (e) => {
+    const c = document.getElementById('cfg');
+    if (c && c.classList.contains('open') && !e.target.closest('#cfg') && !e.target.closest('[data-act=openCfg]')) c.classList.remove('open');
+  });
+
   // dispatch click
   document.addEventListener('click', (e) => {
     const node = e.target.closest('[data-act]');
@@ -513,8 +648,13 @@
 
   Object.assign(App.actions, {
     closeTop: () => closeSheet(),
-    toggleMore() { const p = document.getElementById('more-pop'); if (p) p.classList.toggle('open'); },
-    openMoreSheet() { openMoreSheet(); },
+    openNav() { document.body.classList.add('nav-open'); },
+    closeNav() { document.body.classList.remove('nav-open'); },
+    openSearch() { const g = document.getElementById('gsearch'); if (!g) return; g.classList.add('open'); const i = document.getElementById('gs-in'); i.focus(); i.select(); },
+    openCfg() { const c = document.getElementById('cfg'); if (!c) return; c.innerHTML = cfgHTML(); requestAnimationFrame(() => c.classList.add('open')); },
+    closeCfg() { const c = document.getElementById('cfg'); if (c) c.classList.remove('open'); },
+    setUI(arg) { const [k, v] = arg.split('='); setUI(k, v); const c = document.getElementById('cfg'); if (c) c.innerHTML = cfgHTML(); movePill(); if (k === 'accent') render(); },
+    resetUI() { try { localStorage.removeItem('ltl_ui'); } catch (e) {} applyUI(); const c = document.getElementById('cfg'); if (c) c.innerHTML = cfgHTML(); render(); },
     toggleTheme() {
       const next = App.isDark() ? 'light' : 'dark';
       try { localStorage.setItem('ltl_theme', next); } catch (e) {}

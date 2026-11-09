@@ -330,35 +330,34 @@
   App.screens.login = function (root) {
     const dark = App.isDark();
     const ui = App.ui;
-    const feat = (ic, t) => '<div><i>' + I(ic) + '</i>' + t + '</div>';
-    root.innerHTML = '<div class="auth"><aside class="auth-side"><span class="blob b1"></span><span class="blob b2"></span>' +
-      '<div><div class="logo-w"><img src="assets/logo-ltl-sm.png" alt="Learn to Leap"></div>' +
-      '<h2>Tạm ứng · Hoàn ứng ·<br>Thanh toán — gọn trong một nơi.</h2>' +
-      '<div class="feat">' + feat('file', 'Lập phiếu đúng mẫu 01-TT/LTL, số phiếu &amp; số tiền bằng chữ tự điền') +
-      feat('camera', 'Chụp bill, lưu minh chứng cho từng khoản chi') +
-      feat('excel', 'Xuất Word / Excel từng phiếu và báo cáo tổng hợp') +
-      feat('shield', 'Mỗi tài khoản một không gian riêng, an toàn') + '</div></div>' +
-      '<small>© Learn to Leap — Công ty CP Công nghệ Giáo dục Learn to Leap</small></aside>' +
-      '<div class="auth-main"><div class="auth-box">' +
-      '<div class="auth-brand"><div class="row"><span class="brand-mark"><img src="assets/logo-mark.png" alt=""></span><span class="brand-t"><b style="font-size:18px">Tạm ứng &amp; <span class="grad-text">Hoàn ứng</span></b><small>Learn to Leap · Hệ thống quản lý chứng từ</small></span></div>' +
-      '<button class="btn out icon" data-act="toggleTheme" aria-label="Đổi giao diện sáng/tối">' + I(dark ? 'sun' : 'moon') + '</button></div>' +
-      '<div class="card fade-in">' +
-      '<div class="seg" style="width:100%;margin-bottom:18px"><button style="flex:1" class="' + (authTab === 'login' ? 'on' : '') + '" data-act="authTab:login">Đăng nhập</button>' +
-      '<button style="flex:1" class="' + (authTab === 'signup' ? 'on' : '') + '" data-act="authTab:signup">Tạo tài khoản</button></div>' +
-      (authTab === 'login'
-        ? '<h2 class="t">Đăng nhập</h2><p class="lead">Dùng email và mật khẩu của bạn. Dữ liệu của mỗi tài khoản hoàn toàn tách biệt.</p>' +
+    const chip = (ic, t) => '<span>' + I(ic, 14) + t + '</span>';
+    const signup = authTab === 'signup';
+    root.innerHTML = '<div class="auth">' +
+      '<div class="auth-main"><div class="auth-box fade-in">' +
+      '<div class="auth-brand"><div class="row"><span class="bm"><img src="assets/logo-mark.png" alt=""></span><span><b>Tạm ứng &amp; Hoàn ứng</b><small>Learn to Leap · Hệ thống quản lý chứng từ</small></span></div>' +
+      '<button class="tb-btn" data-act="toggleTheme" aria-label="Đổi giao diện sáng/tối">' + I(dark ? 'sun' : 'moon') + '</button></div>' +
+      '<div class="card">' +
+      (!signup
+        ? '<h2 class="t">Chào mừng trở lại</h2><p class="lead">Nhập email và mật khẩu để đăng nhập.</p>' +
           '<form id="auth-form" novalidate>' + ui.text('au-email', 'Email', '', { type: 'email', auto: 'username', ph: 'ban@learntoleap.vn' }) +
-          ui.text('au-pass', 'Mật khẩu', '', { type: 'password', auto: 'current-password' }) +
-          '<button class="btn accent block lg" type="submit" id="au-go">' + I('key') + 'Đăng nhập</button></form>' +
-          '<div class="center mt12"><button class="btn ghost sm" data-act="forgotPass">Quên mật khẩu?</button></div>'
-        : '<h2 class="t">Tạo tài khoản</h2><p class="lead">Tự tạo tài khoản bằng email công việc. Thông tin này điền sẵn vào phiếu đề nghị.</p>' +
+          ui.text('au-pass', 'Mật khẩu', '', { type: 'password', auto: 'current-password', ph: 'Mật khẩu' }) +
+          '<label class="switch" style="margin:-2px 0 14px"><input type="checkbox" checked disabled> Ghi nhớ đăng nhập trên máy này</label>' +
+          '<button class="btn block lg" type="submit" id="au-go">Đăng nhập</button></form>' +
+          '<div class="center mt16 muted" style="font-size:13.5px">Chưa có tài khoản? <a href="#" data-act="authTab:signup"><b class="grad-text">Tạo tài khoản</b></a></div>' +
+          '<div class="center mt8"><button class="btn ghost sm" data-act="forgotPass" style="text-transform:none">Quên mật khẩu?</button></div>'
+        : '<h2 class="t">Tạo tài khoản</h2><p class="lead">Mỗi người tự tạo tài khoản bằng email công việc. Thông tin này được điền sẵn vào phiếu.</p>' +
           '<form id="auth-form" novalidate>' + ui.text('au-name', 'Họ và tên', '', { auto: 'name', ph: 'Nguyễn Văn A', req: true }) +
           ui.text('au-dept', 'Bộ phận', '', { list: 'au-dl', ph: 'Chọn hoặc gõ bộ phận' }) + ui.datalist('au-dl', App.DEFAULT_SETTINGS.boPhanList) +
           ui.text('au-email', 'Email', '', { type: 'email', auto: 'username', req: true }) +
           ui.text('au-pass', 'Mật khẩu', '', { type: 'password', auto: 'new-password', ph: 'Tối thiểu 6 ký tự', req: true }) +
-          '<button class="btn accent block lg" type="submit" id="au-go">' + I('user') + 'Tạo tài khoản</button></form>') +
+          '<button class="btn dark block lg" type="submit" id="au-go">Tạo tài khoản</button></form>' +
+          '<div class="center mt16 muted" style="font-size:13.5px">Đã có tài khoản? <a href="#" data-act="authTab:login"><b class="grad-text">Đăng nhập</b></a></div>') +
       (!navigator.onLine ? '<div class="alert warn mt16">' + I('alert') + '<div>Đang offline. Lần đăng nhập đầu tiên trên máy này cần có mạng.</div></div>' : '') +
-      '</div><p class="foot-note">Learn to Leap — dữ liệu được đồng bộ an toàn, chạy được cả khi mất mạng sau lần đăng nhập đầu.</p></div></div></div>';
+      '</div><p class="foot-note">© ' + new Date().getFullYear() + ' Learn to Leap · Dữ liệu đồng bộ an toàn, chạy cả khi mất mạng.</p></div></div>' +
+      '<aside class="auth-art">' + App.waves({ seed: 11, colors: ['#ffffff', '#ffd0ec', '#b9a2ff', '#ffb36b', '#7fe3ff'], op: 0.7, n: 46, sw: 2.6, y0: -0.05, spread: 1.1 }) +
+      '<div class="logo-w"><img src="assets/logo-ltl-sm.png" alt="Learn to Leap"></div>' +
+      '<div class="ac"><h3>Tạm ứng · Hoàn ứng · Thanh toán<br>gọn trong một nơi.</h3><p>Lập phiếu đúng mẫu 01-TT/LTL, lưu minh chứng từng khoản chi, xuất Word / Excel và báo cáo tổng hợp.</p>' +
+      '<div class="feat">' + chip('file', 'Phiếu đúng mẫu') + chip('camera', 'Chụp bill') + chip('excel', 'Word / Excel') + chip('shield', 'Tài khoản riêng') + '</div></div></aside></div>';
     const form = document.getElementById('auth-form');
     form.addEventListener('submit', (e) => { e.preventDefault(); submitAuth(); });
   };
