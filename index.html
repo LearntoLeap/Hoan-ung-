@@ -2,9 +2,9 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>LtL · Tạm ứng & Hoàn ứng</title>
-  <meta name="description" content="Quản lý tạm ứng, hoàn ứng và đề nghị thanh toán — Learn to Leap" />
+  <meta name="description" content="Hệ thống quản lý tạm ứng, hoàn ứng và đề nghị thanh toán theo mẫu 01-TT/LTL — Learn to Leap" />
   <meta name="theme-color" content="#ffffff" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/png" href="icons/favicon-32.png" />
@@ -13,27 +13,33 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="LtL Hoàn ứng" />
+  <script>
+    // đặt chế độ sáng/tối trước khi vẽ để không nháy màn hình
+    try {
+      var t = localStorage.getItem('ltl_theme') || 'system';
+      if (t === 'dark' || (t === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark');
+    } catch (e) {}
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
   <link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
-  <div class="app" id="app"><!-- render --></div>
+  <div id="app"></div>
   <div id="modal-root"></div>
-  <div class="toast-wrap" id="toast-root"></div>
+  <div class="toast-wrap" id="toast-root" aria-live="polite"></div>
 
   <script src="assets/utils.js"></script>
   <script src="assets/db.js"></script>
   <script src="assets/app.js"></script>
   <script src="assets/ui.js"></script>
-  <script src="assets/docgen.js"></script>
-  <script src="assets/pdfgen.js"></script>
+  <script src="assets/forms.js"></script>
+  <script src="assets/export.js"></script>
   <script src="assets/screen-dashboard.js"></script>
-  <script src="assets/screen-advance.js"></script>
   <script src="assets/screen-expenses.js"></script>
-  <script src="assets/screen-refund.js"></script>
   <script src="assets/screen-events.js"></script>
+  <script src="assets/admin.js"></script>
   <script src="assets/cloud.js"></script>
   <script>
     if ('serviceWorker' in navigator) {

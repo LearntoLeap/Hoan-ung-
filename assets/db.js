@@ -1,12 +1,13 @@
 /* =========================================================================
-   db.js — Lớp dữ liệu IndexedDB (offline). Lưu sự kiện, tạm ứng, khoản chi,
-   ảnh minh chứng (blob), cài đặt. Trả về Promise.
+   db.js — Lớp dữ liệu IndexedDB (offline). Lưu sự kiện, khoản chi, ảnh minh
+   chứng (blob), phiếu đề nghị (tạm ứng / hoàn ứng / thanh toán), cài đặt.
+   v2: thêm store "docs" cho phiếu theo mẫu 01-TT/LTL.
    ========================================================================= */
 (function (global) {
   'use strict';
 
   const DB_NAME = 'ltl_hoanung';
-  const DB_VER = 1;
+  const DB_VER = 2;
   let _db = null;
 
   function open() {
@@ -15,28 +16,25 @@
       const req = indexedDB.open(DB_NAME, DB_VER);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
-        if (!db.objectStoreNames.contains('settings')) {
-          db.createObjectStore('settings', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('events')) {
-          db.createObjectStore('events', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('advances')) {
-          const s = db.createObjectStore('advances', { keyPath: 'id' });
-          s.createIndex('eventId', 'eventId', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('expenses')) {
-          const s = db.createObjectStore('expenses', { keyPath: 'id' });
-          s.createIndex('eventId', 'eventId', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('images')) {
-          const s = db.createObjectStore('images', { keyPath: 'id' });
-          s.createIndex('expenseId', 'expenseId', { unique: false });
-          s.createIndex('eventId', 'eventId', { unique: false });
-        }
+        const ensure = (name, indexes) => {
+          if (db.objectStoreNames.contains(name)) return;
+          const s = db.createObjectStore(name, { keyPath: 'id' });
+          (indexes || []).forEach((ix) => s.createIndex(ix, ix, { unique: false }));
+        };
+        ensure('settings');
+        ensure('events');
+        ensure('advances', ['eventId']);   // dữ liệu cũ (v1) — chỉ đọc để chuyển sang phiếu
+        ensure('expenses', ['eventId']);
+        ensure('images', ['expenseId', 'eventId']);
+        ensure('docs', ['eventId', 'type']);
       };
-      req.onsuccess = () => { _db = req.result; resolve(_db); };
+      req.onsuccess = () => {
+        _db = req.result;
+        _db.onversionchange = () => { try { _db.close(); } catch (e) {} _db = null; };
+        resolve(_db);
+      };
       req.onerror = () => reject(req.error);
+      req.onblocked = () => reject(new Error('Hãy đóng các tab khác của ứng dụng rồi tải lại trang.'));
     });
   }
 
@@ -51,6 +49,7 @@
   }
 
   const DB = {
+    open,
     put(store, value) { return tx(store, 'readwrite').then((s) => wrap(s.put(value))).then(() => value); },
     get(store, id) { return tx(store, 'readonly').then((s) => wrap(s.get(id))); },
     del(store, id) { return tx(store, 'readwrite').then((s) => wrap(s.delete(id))); },
@@ -60,32 +59,43 @@
     },
     clear(store) { return tx(store, 'readwrite').then((s) => wrap(s.clear())); },
 
-    // xoá theo cascade khi xoá sự kiện / khoản chi
-    delImagesByExpense(expenseId) {
-      return DB.byIndex('images', 'expenseId', expenseId).then((imgs) =>
-        Promise.all(imgs.map((i) => DB.del('images', i.id))));
+    // Xoá theo cascade — luôn đi qua DB.del (đã được cloud.js bọc) để bản ghi
+    // trên đám mây cũng bị xoá, không "sống lại" ở lần đồng bộ sau.
+    async delImagesByExpense(expenseId) {
+      const imgs = await DB.byIndex('images', 'expenseId', expenseId);
+      for (const i of imgs) await DB.del('images', i.id);
     },
-    delExpense(expenseId) {
-      return DB.delImagesByExpense(expenseId).then(() => DB.del('expenses', expenseId));
+    async delExpense(expenseId) {
+      await DB.delImagesByExpense(expenseId);
+      await DB.del('expenses', expenseId);
     },
-    delEventCascade(eventId) {
-      return Promise.all([
+    async delEventCascade(eventId) {
+      const [exps, advs, imgs, docs] = await Promise.all([
         DB.byIndex('expenses', 'eventId', eventId),
         DB.byIndex('advances', 'eventId', eventId),
         DB.byIndex('images', 'eventId', eventId),
-      ]).then(([exps, advs, imgs]) => Promise.all([
-        ...imgs.map((i) => DB.del('images', i.id)),
-        ...exps.map((e) => DB.del('expenses', e.id)),
-        ...advs.map((a) => DB.del('advances', a.id)),
-      ])).then(() => DB.del('events', eventId));
+        DB.byIndex('docs', 'eventId', eventId),
+      ]);
+      for (const i of imgs) await DB.del('images', i.id);
+      for (const e of exps) await DB.del('expenses', e.id);
+      for (const a of advs) await DB.del('advances', a.id);
+      // Phiếu giữ lại (chỉ bỏ liên kết sự kiện) — phiếu là chứng từ, không xoá theo sự kiện.
+      for (const d of docs) { d.eventId = null; await DB.put('docs', d); }
+      await DB.del('events', eventId);
+    },
+    async clearAllUserData() {
+      for (const s of ['events', 'advances', 'expenses', 'images', 'docs']) {
+        const rows = await DB.all(s);
+        for (const r of rows) await DB.del(s, r.id);
+      }
     },
 
-    // xuất / nhập toàn bộ dữ liệu (không gồm blob ảnh để gọn — ảnh giữ trong máy)
+    // xuất toàn bộ dữ liệu (không gồm blob ảnh để gọn — ảnh giữ trong máy)
     async exportJSON() {
-      const [settings, events, advances, expenses] = await Promise.all([
-        DB.all('settings'), DB.all('events'), DB.all('advances'), DB.all('expenses'),
+      const [settings, events, docs, expenses] = await Promise.all([
+        DB.all('settings'), DB.all('events'), DB.all('docs'), DB.all('expenses'),
       ]);
-      return { settings, events, advances, expenses, exportedAt: new Date().toISOString() };
+      return { settings, events, docs, expenses, exportedAt: new Date().toISOString() };
     },
   };
 

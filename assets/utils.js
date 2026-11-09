@@ -94,6 +94,42 @@
     return U.docSo(amount) + '.';
   };
 
+  /* ---- Đọc số theo đúng công thức của mẫu Excel 01-TT/LTL ----
+     Nhóm tỷ / triệu / nghìn / đơn vị, các nhóm cách nhau bằng dấu phẩy,
+     "lẻ", "mốt", "lăm", "tư" như công thức trong tab Phiếu. Kết quả viết hoa
+     chữ đầu, kết thúc bằng hậu tố (mặc định "đồng chẵn."). */
+  function readGroupLTL(T, hasHigher) {
+    const V = Math.floor(T / 100), W = Math.floor((T % 100) / 10), X = T % 10;
+    let s = '';
+    if (V > 0 || (hasHigher && T > 0)) s += ONES[V] + ' trăm ';
+    if (W === 0) { if (X > 0 && (V > 0 || hasHigher)) s += 'lẻ '; }
+    else if (W === 1) s += 'mười ';
+    else s += ONES[W] + ' mươi ';
+    if (X > 0) {
+      if (W >= 2 && X === 1) s += 'mốt';
+      else if (W >= 1 && X === 5) s += 'lăm';
+      else if (W >= 2 && X === 4) s += 'tư';
+      else s += ONES[X];
+    }
+    return s.replace(/\s+/g, ' ').trim();
+  }
+  U.docSoLTL = function (amount, opts) {
+    opts = opts || {};
+    const nghin = opts.nghin || 'ngàn';
+    const hauTo = opts.hauTo == null ? 'đồng chẵn.' : opts.hauTo;
+    let n = Math.round(Math.abs(U.toNumber(amount)));
+    if (n >= 1e12) return '(Số tiền quá lớn - đề nghị nhập bằng chữ thủ công)';
+    if (n === 0) return 'Không ' + hauTo;
+    const ty = Math.floor(n / 1e9), tr = Math.floor((n % 1e9) / 1e6), ng = Math.floor((n % 1e6) / 1e3), dv = n % 1e3;
+    let t = '';
+    if (ty > 0) t += readGroupLTL(ty, false) + ' tỷ, ';
+    if (tr > 0) t += readGroupLTL(tr, ty > 0) + ' triệu, ';
+    if (ng > 0) t += readGroupLTL(ng, ty > 0 || tr > 0) + ' ' + nghin + ', ';
+    if (dv > 0) t += readGroupLTL(dv, ty > 0 || tr > 0 || ng > 0) + ', ';
+    t = t.slice(0, -2) + ' ' + hauTo;
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  };
+
   /* ---- Ngày tháng ---- */
   U.todayISO = function () {
     const d = new Date();
