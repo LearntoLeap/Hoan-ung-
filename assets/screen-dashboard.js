@@ -20,7 +20,7 @@
         '<div class="wh-t">Chào mừng đến Learn to Leap</div>' +
         '<div class="wh-s">Trợ lý tạm ứng · hoàn ứng · thanh toán. Tạo sự kiện đầu tiên để bắt đầu.</div>' +
         '<button class="btn btn-primary" data-act="addEvent" style="max-width:260px;margin:14px auto 0">＋ Tạo sự kiện</button>' +
-        '<button class="btn btn-ghost" data-act="helpSheet" style="max-width:260px;margin:9px auto 0">📘 Xem hướng dẫn</button>' +
+        '<button class="btn btn-ghost" data-act="helpSheet" style="max-width:260px;margin:9px auto 0">Xem hướng dẫn</button>' +
         '</div>';
       return;
     }
@@ -55,20 +55,20 @@
 
       '<div class="stat-grid">' +
       '<div class="stat hero"><div class="deco"></div><div class="hero-bot hero-photo"><img src="assets/robot-mini.png" alt="Robot Alpha Mini" class="robot-float" decoding="async"></div>' +
-      '<div class="lab">💼 Tổng đã tạm ứng</div>' +
+      '<div class="lab">Tổng đã tạm ứng</div>' +
       '<div class="val">' + money(totAdv) + '</div>' +
       '<div class="hero-bar"><div class="hb-track"><span style="width:' + settlePct + '%"></span></div>' +
       '<div class="hb-cap">Đã chi ' + settlePct + '% · ' + money(totSpent) + '</div></div>' +
       '</div>' +
-      '<div class="stat"><div class="lab">⚖️ Chênh lệch</div><div class="val ' + (diff >= 0 ? 'tone-pos' : 'tone-neg') + '">' +
+      '<div class="stat"><div class="lab">Chênh lệch</div><div class="val ' + (diff >= 0 ? 'tone-pos' : 'tone-neg') + '">' +
       (diff >= 0 ? '' : '−') + money(Math.abs(diff)) + '</div>' +
       '<div class="stat-sub">' + surplus + ' dư · ' + deficit + ' thiếu</div></div>' +
-      '<div class="stat"><div class="lab">📅 Chi tháng này</div><div class="val">' + money(monthSpent) + '</div>' +
+      '<div class="stat"><div class="lab">Chi tháng này</div><div class="val">' + money(monthSpent) + '</div>' +
       '<div class="stat-sub">' + esc(U.monthLabel(thisMonth)) + '</div></div>' +
       '</div>' +
 
       '<div class="dash-grid mt16">' +
-      '<div class="card mb0"><div class="card-h"><div class="t">🧾 Cơ cấu hoá đơn theo số tiền</div>' +
+      '<div class="card mb0"><div class="card-h"><div class="t">Cơ cấu hoá đơn theo số tiền</div>' +
       '<span class="badge ' + (pctProof >= 70 ? 'ok' : pctProof >= 40 ? 'warn' : 'danger') + '">' + pctProof + '% VAT</span></div>' +
       '<div class="seg-bar">' +
       (proofAmt > 0 ? '<span class="seg vat" style="flex:' + proofAmt + '" title="VAT"></span>' : '') +
@@ -83,29 +83,29 @@
       '</div>' +
       '<div class="chart-wrap mt12"><canvas id="ch-proof"></canvas></div></div>' +
 
-      '<div class="card mb0"><div class="card-h"><div class="t">📅 Chi theo tháng</div></div>' +
+      '<div class="card mb0"><div class="card-h"><div class="t">Chi theo tháng</div></div>' +
       (months.length ? '<div class="chart-wrap"><canvas id="ch-month"></canvas></div>' : '<p class="muted center">Chưa có dữ liệu chi.</p>') + '</div>' +
 
-      '<div class="card mb0 span2"><div class="card-h"><div class="t">🎯 Tạm ứng vs Thực chi theo sự kiện</div></div>' +
+      '<div class="card mb0 span2"><div class="card-h"><div class="t">Tạm ứng vs Thực chi theo sự kiện</div></div>' +
       '<div class="chart-wrap tall"><canvas id="ch-event"></canvas></div></div>' +
       '</div>' +
 
-      '<div class="section-label">📊 Chi tiết theo từng sự kiện</div>' +
+      '<div class="section-label">Chi tiết theo từng sự kiện</div>' +
       '<div class="ev-detail">' +
       perEvent.map(({ ev, m }) => {
         const tone = m.remaining >= 0 ? 'ok' : 'danger';
         return '<div class="evd" data-act="gotoEvent:' + ev.id + '">' +
           '<div class="evd-h"><div class="evd-t">' + esc(ev.name) + '</div>' +
           '<span class="badge ' + tone + '">' + (m.remaining >= 0 ? 'Dư ' : 'Thiếu ') + U.groupThousand(Math.abs(m.remaining)) + '</span></div>' +
-          '<div class="evd-sub">📅 ' + esc(U.fmtDate(ev.date)) + ' · ' + m.count + ' khoản chi</div>' +
+          '<div class="evd-sub">' + esc(U.fmtDate(ev.date)) + ' · ' + m.count + ' khoản chi</div>' +
           '<div class="evd-grid">' +
-          '<div class="evd-cell"><div class="ec-l">💼 Đã tạm ứng</div><div class="ec-v">' + money(m.advanceTotal) + '</div></div>' +
-          '<div class="evd-cell"><div class="ec-l">🧾 Thực chi</div><div class="ec-v">' + money(m.spentTotal) + '</div></div>' +
-          '<div class="evd-cell"><div class="ec-l">💰 Còn lại</div><div class="ec-v ' + (m.remaining >= 0 ? 'pos' : 'neg') + '">' + money(m.remaining) + '</div></div>' +
-          '<div class="evd-cell"><div class="ec-l">🧾 VAT theo tiền</div><div class="ec-v">' + m.pctVatAmount + '%</div></div>' +
+          '<div class="evd-cell"><div class="ec-l">Đã tạm ứng</div><div class="ec-v">' + money(m.advanceTotal) + '</div></div>' +
+          '<div class="evd-cell"><div class="ec-l">Thực chi</div><div class="ec-v">' + money(m.spentTotal) + '</div></div>' +
+          '<div class="evd-cell"><div class="ec-l">Còn lại</div><div class="ec-v ' + (m.remaining >= 0 ? 'pos' : 'neg') + '">' + money(m.remaining) + '</div></div>' +
+          '<div class="evd-cell"><div class="ec-l">VAT theo tiền</div><div class="ec-v">' + m.pctVatAmount + '%</div></div>' +
           '</div>' +
           '<div class="evd-bar"><span style="width:' + m.pctVatAmount + '%"></span></div>' +
-          '<div class="evd-foot">🧾 Giá trị có VAT ' + money(m.vatAmount) + ' · Bill ' + m.pctBillAmount + '% · 📎 Có ảnh ' + m.withImagesCount + '/' + m.count + '</div>' +
+          '<div class="evd-foot">Giá trị có VAT ' + money(m.vatAmount) + ' · Bill ' + m.pctBillAmount + '% · Có ảnh ' + m.withImagesCount + '/' + m.count + '</div>' +
           '</div>';
       }).join('') +
       '</div>' +
@@ -116,10 +116,12 @@
 
   function buildCharts(d) {
     App.ensureLib('chart').then((Chart) => {
-      const purple = '#a8418d', purple2 = '#e7b3d6', green = '#10b981', amber = '#f59e0b';
-      Chart.defaults.font.family = 'Segoe UI, system-ui, sans-serif';
-      Chart.defaults.font.size = 11;
-      Chart.defaults.color = '#857e9e';
+      const purple = '#8a3f97', purple2 = '#e3cdea', green = '#0f9f6e', amber = '#f0a630';
+      Chart.defaults.font.family = '"Be Vietnam Pro", "Segoe UI", system-ui, sans-serif';
+      Chart.defaults.font.size = 11.5;
+      Chart.defaults.color = '#7a8196';
+      Chart.defaults.borderColor = '#eef0f5';
+      Chart.defaults.maintainAspectRatio = false;
 
       const c1 = document.getElementById('ch-proof');
       const hasData = (d.proofAmt + d.billAmt + d.noneAmt) > 0;

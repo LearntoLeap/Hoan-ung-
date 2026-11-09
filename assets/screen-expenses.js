@@ -49,7 +49,7 @@
       cam.querySelector('#cam-v').style.display = 'none';
       if (!cam.querySelector('.cam-msg')) {
         const m = document.createElement('div'); m.className = 'cam-msg';
-        m.innerHTML = esc(msg) + '<br><br><button class="btn btn-primary" id="cam-lib2" style="max-width:240px">🖼️ Chọn từ thư viện</button>';
+        m.innerHTML = esc(msg) + '<br><br><button class="btn btn-primary" id="cam-lib2" style="max-width:240px">Chọn từ thư viện</button>';
         cam.insertBefore(m, cam.querySelector('.cam-bot'));
         m.querySelector('#cam-lib2').onclick = cam.querySelector('#cam-lib').onclick;
       }
@@ -76,16 +76,16 @@
       const imgs = byExp[e.id] || [];
       const thumb = imgs[0];
       const proof = imgs.length
-        ? '<span class="badge ok">📎 ' + imgs.length + '</span>'
+        ? '<span class="badge ok">' + imgs.length + '</span>'
         : '<span class="badge warn">Thiếu ảnh</span>';
       return '<div class="exp" data-act="editExpense:' + e.id + '">' +
         '<div class="thumb">' + (thumb ? (thumb.kind === 'video' ? '🎬' : '<img src="' + App.imgURL(thumb) + '">') : '🧾') + '</div>' +
         '<div class="body"><div class="top"><div class="title">' + esc(e.content || '(chưa có nội dung)') + '</div>' +
         '<div class="amt">' + money(e.amount) + '</div></div>' +
-        '<div class="meta"><span>📅 ' + esc(U.fmtDayMonth(e.date)) + '</span>' + App.vatBadge(e) + proof +
+        '<div class="meta"><span>' + esc(U.fmtDayMonth(e.date)) + '</span>' + App.vatBadge(e) + proof +
         (e.category ? '<span>· ' + esc(e.category) + '</span>' : '') + '</div>' +
-        (e.transferNote ? '<div class="note">💸 ' + esc(e.transferNote) + '</div>' : '') +
-        '<div class="meta" style="margin-top:4px">🕒 ' + esc(U.fmtDateTime(e.uploadedAt || e.createdAt)) + '</div>' +
+        (e.transferNote ? '<div class="note">' + esc(e.transferNote) + '</div>' : '') +
+        '<div class="meta" style="margin-top:4px">' + esc(U.fmtDateTime(e.uploadedAt || e.createdAt)) + '</div>' +
         '</div></div>';
     }
 
@@ -129,25 +129,25 @@
     }
 
     root.innerHTML =
-      '<div class="screen-title">🧾 Chi tiêu & Minh chứng</div>' +
+      '<div class="screen-title">Chi tiêu & Minh chứng</div>' +
       '<div class="screen-sub">' + esc(ev.name) + '</div>' +
-      '<div class="card"><div class="kv"><div class="k">💼 Đã tạm ứng</div><div class="v">' + money(m.advanceTotal) + '</div></div>' +
-      '<div class="kv"><div class="k">🧾 Thực chi (' + m.count + ' khoản)</div><div class="v">' + money(m.spentTotal) + '</div></div>' +
-      '<div class="kv"><div class="k">💰 Còn lại</div><div class="v ' + (m.remaining >= 0 ? 'pos' : 'neg') + '">' + money(m.remaining) + '</div></div>' +
-      '<div style="margin-top:12px"><div class="kv" style="border:none;padding-bottom:6px"><div class="k">🧾 Tỷ lệ giá trị có hoá đơn VAT</div><div class="v">' + m.pctVatAmount + '%</div></div>' +
+      '<div class="card"><div class="kv"><div class="k">Đã tạm ứng</div><div class="v">' + money(m.advanceTotal) + '</div></div>' +
+      '<div class="kv"><div class="k">Thực chi (' + m.count + ' khoản)</div><div class="v">' + money(m.spentTotal) + '</div></div>' +
+      '<div class="kv"><div class="k">Còn lại</div><div class="v ' + (m.remaining >= 0 ? 'pos' : 'neg') + '">' + money(m.remaining) + '</div></div>' +
+      '<div style="margin-top:12px"><div class="kv" style="border:none;padding-bottom:6px"><div class="k">Tỷ lệ giá trị có hoá đơn VAT</div><div class="v">' + m.pctVatAmount + '%</div></div>' +
       '<div class="progress ' + (m.pctVatAmount >= 80 ? 'ok' : m.pctVatAmount >= 40 ? '' : 'warn') + '"><span style="width:' + m.pctVatAmount + '%"></span></div>' +
       '<div class="hint" style="margin:6px 0 0">% theo <b>số tiền</b> (giá trị có HĐ VAT / tổng chi), không phải theo số khoản.</div>' +
       '<div class="vchip-row mt8">' +
-      '<span class="vchip vat">🧾 VAT: ' + m.vatCount + ' khoản · ' + money(m.vatAmount) + '</span>' +
-      '<span class="vchip bill">🧾 Bill: ' + m.billCount + ' khoản · ' + money(m.billAmount) + '</span>' +
-      '<span class="vchip none">📎 Có ảnh: ' + m.withImagesCount + '/' + m.count + '</span>' +
+      '<span class="vchip vat">VAT: ' + m.vatCount + ' khoản · ' + money(m.vatAmount) + '</span>' +
+      '<span class="vchip bill">Bill: ' + m.billCount + ' khoản · ' + money(m.billAmount) + '</span>' +
+      '<span class="vchip none">Có ảnh: ' + m.withImagesCount + '/' + m.count + '</span>' +
       '</div></div></div>' +
 
       '<div class="btn-row mt8">' +
       '<button class="btn btn-soft" data-act="addExpense">＋ Thêm khoản chi</button>' +
-      '<button class="btn btn-primary" data-act="quickCapture">📷 Chụp bill nhanh</button></div>' +
+      '<button class="btn btn-primary" data-act="quickCapture">Chụp bill nhanh</button></div>' +
 
-      '<div class="section-label">📒 Danh sách khoản chi</div>' +
+      '<div class="section-label">Danh sách khoản chi</div>' +
       toolbarHTML() +
       '<div id="exp-list">' + listHTML() + '</div>' +
       '<div style="height:6px"></div>';
@@ -200,20 +200,20 @@
     App.draftExpense = d;
 
     const ov = App.openSheet(
-      '<div class="sheet-h"><div class="st">' + (expense ? '✏️ Sửa khoản chi' : '🧾 Thêm khoản chi') + '</div>' +
+      '<div class="sheet-h"><div class="st">' + (expense ? 'Sửa khoản chi' : 'Thêm khoản chi') + '</div>' +
       '<button class="icon-btn" style="background:var(--v100);color:var(--v700)" data-act="closeTop">✕</button></div>' +
       ui.text('exp-content', 'Nội dung chi', d.content, { ph: 'VD: Tiền vận chuyển thiết bị' }) +
       '<div class="row2">' + ui.money('exp-amt', 'Số tiền', d.amount) + ui.date('exp-date', 'Ngày chi', d.date) + '</div>' +
       ui.textarea('exp-transfer', 'Nội dung chuyển khoản', d.transferNote, { rows: 2, ph: 'Nội dung CK / người nhận (tuỳ chọn)' }) +
       '<div class="row2">' + ui.select('exp-cat', 'Phân loại', d.category, App.CATEGORIES) +
       ui.select('exp-vat', 'Loại hoá đơn', d.vatType, App.VAT_TYPES) + '</div>' +
-      '<div class="hint" style="margin:-4px 0 8px">📌 Chỉ <b>Hoá đơn VAT</b> mới được tính là “có hoá đơn”.</div>' +
-      '<div class="section-label" style="margin-top:12px">📎 Minh chứng (ảnh / video / bill)</div>' +
+      '<div class="hint" style="margin:-4px 0 8px">Chỉ <b>Hoá đơn VAT</b> mới được tính là “có hoá đơn”.</div>' +
+      '<div class="section-label" style="margin-top:12px">Minh chứng (ảnh / video / bill)</div>' +
       '<div id="exp-images">' + imagesGrid(d) + '</div>' +
-      '<div class="hint">🕒 Cập nhật: <span id="exp-uploaded">' + esc(U.fmtDateTime(d.uploadedAt)) + '</span></div>' +
+      '<div class="hint">Cập nhật: <span id="exp-uploaded">' + esc(U.fmtDateTime(d.uploadedAt)) + '</span></div>' +
       '<div class="btn-row mt16">' +
-      (expense ? '<button class="btn btn-danger" data-act="delExpense:' + d.id + '">🗑️ Xoá</button>' : '') +
-      '<button class="btn btn-primary" data-act="saveExpense">💾 Lưu khoản chi</button></div>');
+      (expense ? '<button class="btn btn-danger" data-act="delExpense:' + d.id + '">Xoá</button>' : '') +
+      '<button class="btn btn-primary" data-act="saveExpense">Lưu khoản chi</button></div>');
     return ov;
   }
   App.openExpenseEditor = openExpenseEditor;
@@ -237,13 +237,13 @@
     const media = im.kind === 'video' ? '<video src="' + url + '" controls playsinline style="width:100%;border-radius:14px;max-height:46vh"></video>'
       : '<img src="' + url + '" style="width:100%;border-radius:14px;max-height:46vh;object-fit:contain;background:#000">';
     const ov = App.openSheet(
-      '<div class="sheet-h"><div class="st">📎 Minh chứng</div>' +
+      '<div class="sheet-h"><div class="st">Minh chứng</div>' +
       '<button class="icon-btn" style="background:var(--v100);color:var(--v700)" data-act="closeTop">✕</button></div>' +
       media +
       ui.textarea('img-note', 'Ghi chú cho ảnh này', im.note, { rows: 2, ph: 'VD: Bill chuyển khoản xe Van qua CVA' }) +
       ui.money('img-amt', 'Số tiền của minh chứng (tuỳ chọn)', im.amount) +
-      '<div class="btn-row mt12"><button class="btn btn-danger" data-act="rmImg:' + im.id + '">🗑️ Xoá ảnh</button>' +
-      '<button class="btn btn-primary" id="img-save">💾 Lưu ghi chú</button></div>');
+      '<div class="btn-row mt12"><button class="btn btn-danger" data-act="rmImg:' + im.id + '">Xoá ảnh</button>' +
+      '<button class="btn btn-primary" id="img-save">Lưu ghi chú</button></div>');
     ov.querySelector('#img-save').onclick = () => {
       im.note = App.val('img-note'); im.amount = App.valMoney('img-amt');
       App.closeSheet(ov); refreshGrid(); App.toast('Đã lưu ghi chú ảnh', 'ok');
@@ -325,8 +325,8 @@
   ];
   App.vatBadge = function (e) {
     const t = App.vatTypeOf(e);
-    if (t === 'vat') return '<span class="badge ok">🧾 VAT</span>';
-    if (t === 'bill') return '<span class="badge">🧾 Bill</span>';
+    if (t === 'vat') return '<span class="badge ok">VAT</span>';
+    if (t === 'bill') return '<span class="badge">Bill</span>';
     return '<span class="badge warn">Chưa có HĐ</span>';
   };
 })();

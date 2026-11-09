@@ -14,7 +14,7 @@
       '<div class="ev-m">' + esc(U.fmtDate(ev.date)) + (ev.location ? ' · ' + esc(ev.location) : '') + '</div></div>' +
       '<button class="icon-btn" style="background:var(--v100);color:var(--v700)" data-act="editEvent:' + ev.id + '">✏️</button></div>'
     ).join('') || '<p class="muted center" style="padding:18px">Chưa có sự kiện nào.</p>';
-    return '<div class="sheet-h"><div class="st">📅 Sự kiện</div>' +
+    return '<div class="sheet-h"><div class="st">Sự kiện</div>' +
       '<button class="icon-btn" style="background:var(--v100);color:var(--v700)" data-act="closeTop">✕</button></div>' +
       items + '<button class="btn btn-primary mt12" data-act="addEvent">＋ Thêm sự kiện</button>';
   }
@@ -22,7 +22,7 @@
   function eventForm(ev) {
     ev = ev || {};
     const isNew = !ev.id;
-    return '<div class="sheet-h"><div class="st">' + (isNew ? '➕ Thêm sự kiện' : '✏️ Sửa sự kiện') + '</div>' +
+    return '<div class="sheet-h"><div class="st">' + (isNew ? 'Thêm sự kiện' : 'Sửa sự kiện') + '</div>' +
       '<button class="icon-btn" style="background:var(--v100);color:var(--v700)" data-act="closeTop">✕</button></div>' +
       ui.text('ev-name', 'Tên sự kiện', ev.name, { ph: 'VD: Sự kiện Trường Chu Văn An' }) +
       '<div class="row2">' + ui.date('ev-date', 'Ngày sự kiện', ev.date || U.todayISO()) + ui.text('ev-loc', 'Địa điểm', ev.location, { ph: 'Trường / địa điểm' }) + '</div>' +
@@ -31,29 +31,29 @@
       ui.money('ev-prev', 'Số dư tạm ứng kỳ trước', ev.prevBalance || 0) +
       ui.textarea('ev-note', 'Ghi chú', ev.note, { rows: 2 }) +
       '<div class="btn-row mt12">' +
-      (isNew ? '' : '<button class="btn btn-danger" data-act="delEvent:' + ev.id + '">🗑️ Xoá</button>') +
-      '<button class="btn btn-primary" data-act="saveEventForm:' + (ev.id || '') + '">💾 Lưu</button></div>';
+      (isNew ? '' : '<button class="btn btn-danger" data-act="delEvent:' + ev.id + '">Xoá</button>') +
+      '<button class="btn btn-primary" data-act="saveEventForm:' + (ev.id || '') + '">Lưu</button></div>';
   }
 
   /* ----------------------- Cài đặt ----------------------- */
   function settingsSheet() {
     const s = App.settings;
-    return '<div class="sheet-h"><div class="st">⚙️ Cài đặt</div>' +
+    return '<div class="sheet-h"><div class="st">Cài đặt</div>' +
       '<button class="icon-btn" style="background:var(--v100);color:var(--v700)" data-act="closeTop">✕</button></div>' +
-      '<div class="section-label" style="margin-top:4px">🏢 Đơn vị</div>' +
+      '<div class="section-label" style="margin-top:4px">Đơn vị</div>' +
       ui.textarea('st-company', 'Tên công ty', s.company, { rows: 2 }) +
       ui.textarea('st-addr', 'Địa chỉ', s.companyAddr, { rows: 2 }) +
-      '<div class="section-label">✍️ Người ký duyệt</div>' +
+      '<div class="section-label">Người ký duyệt</div>' +
       '<div class="row2">' + ui.text('st-dir', 'Giám đốc', s.director) + ui.text('st-acc', 'Kế toán', s.accountant) + '</div>' +
       '<div class="row2">' + ui.text('st-dirTU', 'Chức danh GĐ (tạm ứng)', s.directorTU) + ui.text('st-dirHU', 'Chức danh GĐ (hoàn ứng)', s.directorHU) + '</div>' +
       '<div class="row2">' + ui.text('st-accTU', 'Chức danh KT (tạm ứng)', s.accountantTU) + ui.text('st-accHU', 'Chức danh KT (hoàn ứng)', s.accountantHU) + '</div>' +
-      '<div class="section-label">👤 Mặc định người đề nghị</div>' +
+      '<div class="section-label">Mặc định người đề nghị</div>' +
       ui.text('st-req', 'Họ tên', s.requester) +
       '<div class="row2">' + ui.text('st-dept', 'Bộ phận', s.dept) + ui.text('st-pos', 'Chức vụ', s.position) + '</div>' +
-      '<button class="btn btn-primary mt8" data-act="saveSettings">💾 Lưu cài đặt</button>' +
-      '<div class="section-label">☁️ Tài khoản & Đồng bộ</div>' +
+      '<button class="btn btn-primary mt8" data-act="saveSettings">Lưu cài đặt</button>' +
+      '<div class="section-label">Tài khoản & Đồng bộ</div>' +
       '<div class="menu-item" data-act="openAccount"><div class="mic">☁️</div><div><div class="mt">Tài khoản & Đồng bộ</div><div class="ms">Đăng nhập để dùng chung dữ liệu trên mọi thiết bị</div></div></div>' +
-      '<div class="section-label">💾 Dữ liệu</div>' +
+      '<div class="section-label">Dữ liệu</div>' +
       '<div class="menu-item" data-act="exportData"><div class="mic">📤</div><div><div class="mt">Sao lưu dữ liệu (JSON)</div><div class="ms">Tải file sao lưu sự kiện & khoản chi</div></div></div>' +
       '<div class="menu-item" data-act="helpSheet"><div class="mic">❓</div><div><div class="mt">Hướng dẫn sử dụng</div><div class="ms">Quy trình tạm ứng → hoàn ứng</div></div></div>' +
       '<div class="menu-item" data-act="clearData"><div class="mic" style="background:var(--danger-bg);color:var(--danger)">🗑️</div><div><div class="mt" style="color:var(--danger)">Xoá toàn bộ dữ liệu</div><div class="ms">Không thể hoàn tác</div></div></div>' +
@@ -67,7 +67,7 @@
     const card = (ic, t, body) =>
       '<div class="g-card"><div class="gc-h">' + ic + ' ' + t + '</div>' + body + '</div>';
 
-    return '<div class="sheet-h"><div class="st">📘 Hướng dẫn sử dụng</div>' +
+    return '<div class="sheet-h"><div class="st">Hướng dẫn sử dụng</div>' +
       '<button class="icon-btn x" style="background:var(--v100);color:var(--v700)" data-act="closeTop">✕</button></div>' +
       '<div class="guide">' +
 
@@ -75,13 +75,13 @@
       '<div class="gh-t">Tạm ứng → Hoàn ứng trong 4 bước</div>' +
       '<div class="gh-s">Quản lý chi tiêu sự kiện và tự tạo chứng từ Word · Excel · PDF. Chạy offline, lưu ngay trên máy.</div></div>' +
 
-      '<div class="section-label" style="margin-top:2px">🚀 Quy trình 4 bước</div>' +
+      '<div class="section-label" style="margin-top:2px">Quy trình 4 bước</div>' +
       stp(1, '🎪', 'Tạo sự kiện', 'Bấm <b>📅</b> hoặc <b>＋</b> trên cùng → nhập tên, ngày, địa điểm, người đề nghị. Mỗi sự kiện là một hồ sơ riêng.') +
       stp(2, '📝', 'Tạm ứng', 'Vào tab <b>Tạm ứng</b> → thêm các khoản dự chi → bấm <b>Tạo Word</b> để xuất “Giấy đề nghị tạm ứng” đã có chữ ký.') +
-      stp(3, '🧾', 'Chi tiêu', 'Mỗi lần chi: bấm nút tròn <b>📷 Chụp bill nhanh</b> hoặc <b>＋ Thêm khoản chi</b> → nhập số tiền, nội dung, đính kèm ảnh bill, chọn loại hoá đơn.') +
+      stp(3, '🧾', 'Chi tiêu', 'Mỗi lần chi: bấm nút tròn <b>Chụp bill nhanh</b> hoặc <b>＋ Thêm khoản chi</b> → nhập số tiền, nội dung, đính kèm ảnh bill, chọn loại hoá đơn.') +
       stp(4, '💰', 'Hoàn ứng &amp; Thanh toán', 'App tự tính số dư (tạm ứng − thực chi). Tab <b>Hoàn ứng</b> tạo bảng thống kê kèm ảnh; tab <b>Thanh toán</b> tạo giấy đề nghị thanh toán &amp; xuất Excel.') +
 
-      '<div class="section-label">📱 Từng màn hình làm gì</div>' +
+      '<div class="section-label">Từng màn hình làm gì</div>' +
       card('📊', 'Tổng quan', '<ul>' +
         '<li>Tổng đã tạm ứng, % đã chi, chênh lệch dư/thiếu.</li>' +
         '<li>Biểu đồ: cơ cấu hoá đơn, chi theo tháng, tạm ứng vs thực chi.</li>' +
@@ -101,7 +101,7 @@
         '<li>Tạo <b>Giấy đề nghị thanh toán</b> cho phần vượt tạm ứng.</li>' +
         '<li>Xuất <b>Excel</b> để gửi kế toán.</li></ul>') +
 
-      '<div class="section-label">🏷️ Phân loại hoá đơn</div>' +
+      '<div class="section-label">Phân loại hoá đơn</div>' +
       card('🏷️', 'Chọn đúng để báo cáo chuẩn', 'Mỗi khoản chi chọn 1 loại — quyết định chỉ số <b>% VAT</b> ở Tổng quan:' +
         '<div class="vchip-row" style="margin:9px 0 2px">' +
         '<span class="vchip vat">Hoá đơn VAT</span>' +
@@ -111,16 +111,16 @@
         '<li><b>Bán lẻ</b>: bill thường, phiếu thu.</li>' +
         '<li><b>Không</b>: chưa/không có chứng từ.</li></ul>') +
 
-      '<div class="section-label">⚙️ Nên cài trước khi xuất chứng từ</div>' +
-      '<div class="note-banner" style="display:block;font-size:12.5px">Vào <b>⚙️ Cài đặt</b> điền <b>tên công ty, địa chỉ, người ký (Giám đốc / Kế toán), người đề nghị</b>. Các thông tin này tự điền vào mọi file Word &amp; Excel.</div>' +
+      '<div class="section-label">Nên cài trước khi xuất chứng từ</div>' +
+      '<div class="note-banner" style="display:block;font-size:12.5px">Vào <b>Cài đặt</b> điền <b>tên công ty, địa chỉ, người ký (Giám đốc / Kế toán), người đề nghị</b>. Các thông tin này tự điền vào mọi file Word &amp; Excel.</div>' +
 
-      '<div class="section-label">📴 Offline &amp; 💾 Sao lưu</div>' +
-      '<div class="note-banner" style="display:block;font-size:12.5px">Không cần mạng, không cần đăng nhập — mọi thứ lưu <b>ngay trên thiết bị</b>. Tạo Word/Excel/PDF đều chạy offline.<br>⚠️ Dữ liệu chỉ nằm trên máy này. Thỉnh thoảng vào <b>⚙️ → Sao lưu dữ liệu (JSON)</b> để giữ bản dự phòng.</div>' +
+      '<div class="section-label">Offline &amp; Sao lưu</div>' +
+      '<div class="note-banner" style="display:block;font-size:12.5px">Không cần mạng, không cần đăng nhập — mọi thứ lưu <b>ngay trên thiết bị</b>. Tạo Word/Excel/PDF đều chạy offline.<br>Dữ liệu chỉ nằm trên máy này. Thỉnh thoảng vào <b>→ Sao lưu dữ liệu (JSON)</b> để giữ bản dự phòng.</div>' +
 
-      '<div class="section-label">☁️ Đồng bộ nhiều thiết bị (tuỳ chọn)</div>' +
-      '<div class="note-banner" style="display:block;font-size:12.5px">Bấm <b>☁️</b> trên cùng → nhập <b>Project URL + anon key</b> (Supabase) → <b>đăng ký / đăng nhập</b> bằng email. Máy thứ 2 đăng nhập cùng email là dữ liệu tự về.<br>Biểu tượng góc trên: ☁️ chưa nối · ✅ đã đăng nhập · 🔄 đang đồng bộ · ⚡ offline.</div>' +
+      '<div class="section-label">Đồng bộ nhiều thiết bị (tuỳ chọn)</div>' +
+      '<div class="note-banner" style="display:block;font-size:12.5px">Bấm <b>☁️</b> trên cùng → nhập <b>Project URL + anon key</b> (Supabase) → <b>đăng ký / đăng nhập</b> bằng email. Máy thứ 2 đăng nhập cùng email là dữ liệu tự về.<br>Biểu tượng góc trên: chưa nối · đã đăng nhập · đang đồng bộ · offline.</div>' +
 
-      '<div class="note-banner" style="display:block;font-size:12.5px;background:var(--v50);border-color:var(--v200)">💡 <b>Cài như app:</b> mở menu trình duyệt → “Thêm vào màn hình chính”.<br>💡 <b>Mẹo:</b> chụp bill ngay khi chi để không quên minh chứng.</div>' +
+      '<div class="note-banner" style="display:block;font-size:12.5px;background:var(--v50);border-color:var(--v200)"><b>Cài như app:</b> mở menu trình duyệt → “Thêm vào màn hình chính”.<br><b>Mẹo:</b> chụp bill ngay khi chi để không quên minh chứng.</div>' +
 
       '</div>';
   }

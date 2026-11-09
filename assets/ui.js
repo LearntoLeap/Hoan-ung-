@@ -101,9 +101,9 @@
         '<button class="btn btn-sm btn-soft" data-act="viewFile:' + f.id + '">Xem</button>' +
         '<button class="li-rm" data-act="delFile:' + f.id + '">✕</button></div>';
     }).join('');
-    return '<div class="section-label">📎 ' + esc(title) + '</div>' +
+    return '<div class="section-label">' + esc(title) + '</div>' +
       (list || '<p class="muted" style="font-size:12.5px;margin:0 0 10px">Chưa có tệp nào.</p>') +
-      '<button class="btn btn-ghost btn-sm" data-act="uploadFile:' + docType + '">⬆️ Tải lên tệp</button>';
+      '<button class="btn btn-ghost btn-sm" data-act="uploadFile:' + docType + '">Tải lên tệp</button>';
   };
 
   // actions dùng chung cho attachments

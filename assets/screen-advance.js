@@ -64,7 +64,7 @@
     const d = buildDraft();
 
     root.innerHTML =
-      '<div class="screen-title">📝 Giấy đề nghị tạm ứng</div>' +
+      '<div class="screen-title">Giấy đề nghị tạm ứng</div>' +
       '<div class="screen-sub">' + esc(ev.name) + '</div>' +
       '<div class="card">' +
       '<div class="row2">' + ui.text('adv-so', 'Số phiếu', d.soPhieu, { ph: '02/ĐNTU-LtL' }) + ui.date('adv-date', 'Ngày đề nghị', d.date) + '</div>' +
@@ -73,7 +73,7 @@
       ui.textarea('adv-reason', 'Lý do tạm ứng', d.reason, { rows: 2, ph: 'Lý do / mục đích sử dụng khoản tạm ứng' }) +
       '</div>' +
 
-      '<div class="section-label">📋 Chi tiết khoản chi tạm ứng</div>' +
+      '<div class="section-label">Chi tiết khoản chi tạm ứng</div>' +
       '<div class="card flush" style="padding:13px">' +
       '<div id="adv-items">' + itemsHTML(d.items) + '</div>' +
       '<button class="btn btn-ghost btn-sm" data-act="advAddItem">＋ Thêm khoản</button>' +
@@ -83,8 +83,8 @@
       '</div>' +
 
       '<div class="btn-row mt8">' +
-      '<button class="btn btn-line" data-act="advSave">💾 Lưu</button>' +
-      '<button class="btn btn-primary" data-act="genTamUng">📄 Tạo Word</button>' +
+      '<button class="btn btn-line" data-act="advSave">Lưu</button>' +
+      '<button class="btn btn-primary" data-act="genTamUng">Tạo Word</button>' +
       '</div>' +
 
       App.renderAttachments(App.view.images, 'tamung', 'File tạm ứng đính kèm') +

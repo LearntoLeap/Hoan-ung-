@@ -12,3 +12,6 @@ node_modules/
 Thumbs.db
 .DS_Store
 *.log
+
+.vercel
+.vercel.old-account

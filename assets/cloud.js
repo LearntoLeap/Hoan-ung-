@@ -89,8 +89,14 @@
   function updateBadge() {
     const el = document.getElementById('cloud-badge');
     if (!el) return;
-    el.textContent = badgeIcon();
+    const st = !configured() ? 'off' : !navigator.onLine ? 'offline' : Cloud.state === 'syncing' ? 'syncing' : Cloud.user ? 'ok' : 'off';
+    el.setAttribute('data-state', st);
     el.title = badgeText();
+    const tx = document.getElementById('cloud-text');
+    if (tx) {
+      tx.textContent = Cloud.user ? (Cloud.user.email || 'Đã đăng nhập') : badgeText();
+      tx.parentNode.setAttribute('data-state', st);
+    }
   }
   function badgeIcon() {
     if (!configured()) return '☁️';
@@ -374,7 +380,7 @@
   /* ----------------------------- Giao diện: Tài khoản & Đồng bộ ----------------------------- */
   function accountSheet() {
     const cfg = getCfg();
-    const head = '<div class="sheet-h"><div class="st">☁️ Tài khoản & Đồng bộ</div>' +
+    const head = '<div class="sheet-h"><div class="st">Tài khoản & Đồng bộ</div>' +
       '<button class="icon-btn" style="background:var(--v100);color:var(--v700)" data-act="closeTop">✕</button></div>';
 
     let body;
@@ -383,7 +389,7 @@
         '<div class="section-label">① Kết nối Supabase (miễn phí)</div>' +
         App.ui.text('cl-url', 'Project URL', cfg.url, { ph: 'https://xxxx.supabase.co' }) +
         App.ui.textarea('cl-key', 'Anon public key', cfg.key, { rows: 2, ph: 'eyJhbGciOi…' }) +
-        '<button class="btn btn-primary mt8" data-act="cloudSaveConfig">💾 Lưu kết nối</button>' +
+        '<button class="btn btn-primary mt8" data-act="cloudSaveConfig">Lưu kết nối</button>' +
         schemaBlock();
     } else if (!Cloud.user) {
       body = '<div class="note-banner" style="display:block">Đăng nhập bằng <b>email + mật khẩu</b> để dùng chung dữ liệu trên mọi thiết bị. Lần đầu bấm <b>Đăng ký</b>, các lần sau bấm <b>Đăng nhập</b>.</div>' +
@@ -391,17 +397,17 @@
         App.ui.text('cl-email', 'Email', '', { ph: 'ban@email.com', type: 'email' }) +
         App.ui.text('cl-pass', 'Mật khẩu', '', { ph: 'tối thiểu 6 ký tự', type: 'password' }) +
         '<div class="btn-row mt8">' +
-        '<button class="btn btn-primary" data-act="cloudSignIn">🔓 Đăng nhập</button>' +
-        '<button class="btn btn-soft" data-act="cloudSignUp">✨ Đăng ký</button></div>' +
+        '<button class="btn btn-primary" data-act="cloudSignIn">Đăng nhập</button>' +
+        '<button class="btn btn-soft" data-act="cloudSignUp">Đăng ký</button></div>' +
         (cfg.builtin ? '' :
-          '<button class="btn btn-line btn-sm mt12" data-act="cloudEditConfig">⚙️ Sửa kết nối Supabase</button>' + schemaBlock());
+          '<button class="btn btn-line btn-sm mt12" data-act="cloudEditConfig">Sửa kết nối Supabase</button>' + schemaBlock());
     } else {
       body = '<div class="kv"><div class="k">Đã đăng nhập</div><div class="v">' + esc(Cloud.user.email || '') + '</div></div>' +
         '<div class="kv"><div class="k">Lần đồng bộ gần nhất</div><div class="v">' + (Cloud.lastSync ? esc(U.fmtDateTime(Cloud.lastSync)) : '—') + '</div></div>' +
         '<div class="kv"><div class="k">Mạng</div><div class="v">' + (navigator.onLine ? 'Online' : 'Offline') + '</div></div>' +
-        '<div class="note-banner" style="display:block;font-size:12px;margin-top:12px">🔒 Mỗi tài khoản chỉ xem được dữ liệu của chính mình. Ứng dụng <b>tự đồng bộ mỗi phút</b> khi có mạng.</div>' +
-        '<button class="btn btn-primary mt12" data-act="cloudSyncNow">🔄 Đồng bộ ngay</button>' +
-        '<button class="btn btn-line mt8" data-act="cloudSignOut">🚪 Đăng xuất</button>';
+        '<div class="note-banner" style="display:block;font-size:12px;margin-top:12px">Mỗi tài khoản chỉ xem được dữ liệu của chính mình. Ứng dụng <b>tự đồng bộ mỗi phút</b> khi có mạng.</div>' +
+        '<button class="btn btn-primary mt12" data-act="cloudSyncNow">Đồng bộ ngay</button>' +
+        '<button class="btn btn-line mt8" data-act="cloudSignOut">Đăng xuất</button>';
     }
     return head + '<div id="account-body">' + body + '</div>';
   }
@@ -411,7 +417,7 @@
       '<div class="note-banner" style="display:block;font-size:12px">Vào Supabase → <b>SQL Editor</b> → dán đoạn dưới rồi <b>Run</b> (tạo bảng + bảo mật theo từng tài khoản).' +
       '<pre style="white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;margin:10px 0 0;font-size:11px;max-height:160px;overflow:auto">' +
       esc(SCHEMA_SQL) + '</pre>' +
-      '<button class="btn btn-soft btn-sm mt8" data-act="cloudCopySchema">📋 Copy SQL</button></div>';
+      '<button class="btn btn-soft btn-sm mt8" data-act="cloudCopySchema">Copy SQL</button></div>';
   }
 
   function refreshAccountSheet() {

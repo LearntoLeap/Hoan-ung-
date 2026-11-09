@@ -34,7 +34,7 @@
       : '<tr><td colspan="4" class="muted center">Chưa có khoản chi</td></tr>';
 
     root.innerHTML =
-      '<div class="screen-title">💰 Hoàn ứng</div>' +
+      '<div class="screen-title">Hoàn ứng</div>' +
       '<div class="screen-sub">' + esc(ev.name) + '</div>' +
 
       '<div class="card">' +
@@ -43,10 +43,10 @@
       ui.text('rf-so', 'Số (BK hoàn ứng)', ev.soBKHU || '', { ph: '…/2026/BKHU-LTL' }) +
       '</div>' +
       ui.textarea('rf-diff', 'Hình thức xử lý số chênh lệch', ev.diffHandling || 'Không nộp lại và sẽ trừ vào đợt tạm ứng tiếp theo', { rows: 2 }) +
-      '<button class="btn btn-line btn-sm" data-act="rfSave" style="margin-top:4px">💾 Lưu thông tin</button>' +
+      '<button class="btn btn-line btn-sm" data-act="rfSave" style="margin-top:4px">Lưu thông tin</button>' +
       '</div>' +
 
-      '<div class="section-label">📊 Bảng thống kê chi phí hoàn ứng</div>' +
+      '<div class="section-label">Bảng thống kê chi phí hoàn ứng</div>' +
       '<div class="card"><table class="tbl"><thead><tr><th class="num">TT</th><th>Ngày</th><th>Nội dung</th><th class="num">Số tiền</th></tr></thead>' +
       '<tbody>' + rows +
       '<tr class="total"><td colspan="3">TỔNG TIỀN CHI</td><td class="num" id="rf-spent">' + money(m.spentTotal) + '</td></tr>' +
@@ -61,13 +61,13 @@
       'Hoá đơn bill: <b>' + m.pctBillAmount + '%</b> giá trị (' + money(m.billAmount) + ') · Có ảnh minh chứng: <b>' + m.withImagesCount + '/' + m.count + '</b>. ' +
       'Ảnh minh chứng sẽ được chèn vào cuối Bảng thống kê.</div></div>' +
 
-      '<div class="section-label">📄 Xuất hồ sơ hoàn ứng</div>' +
-      '<button class="btn btn-primary" data-act="genPdfHoanUng">📕 Hồ sơ hoàn ứng đầy đủ (PDF: đề nghị + bảng kê + ảnh)</button>' +
+      '<div class="section-label">Xuất hồ sơ hoàn ứng</div>' +
+      '<button class="btn btn-primary" data-act="genPdfHoanUng">Hồ sơ hoàn ứng đầy đủ (PDF: đề nghị + bảng kê + ảnh)</button>' +
       '<div class="btn-row mt8">' +
-      '<button class="btn btn-soft" data-act="genBangThongKe">📊 Bảng kê + ảnh (Word)</button>' +
-      '<button class="btn btn-line" data-act="genExcel">📗 Xuất Excel</button></div>' +
+      '<button class="btn btn-soft" data-act="genBangThongKe">Bảng kê + ảnh (Word)</button>' +
+      '<button class="btn btn-line" data-act="genExcel">Xuất Excel</button></div>' +
       '<div class="btn-row mt8">' +
-      '<button class="btn btn-line" data-act="genThanhToan">🧮 Giấy đề nghị thanh toán (Word)</button></div>' +
+      '<button class="btn btn-line" data-act="genThanhToan">Giấy đề nghị thanh toán (Word)</button></div>' +
 
       App.renderAttachments(App.view.images, 'hoanung', 'File hoàn ứng đính kèm') +
       '<div style="height:6px"></div>';
@@ -92,7 +92,7 @@
     const payAmt = Math.abs(m.remaining);
 
     root.innerHTML =
-      '<div class="screen-title">🧮 Giấy đề nghị thanh toán</div>' +
+      '<div class="screen-title">Giấy đề nghị thanh toán</div>' +
       '<div class="screen-sub">' + esc(ev.name) + ' · tách riêng với hoàn ứng</div>' +
 
       '<div class="card">' +
@@ -103,18 +103,18 @@
       '</div>' +
 
       '<div class="card">' +
-      '<div class="kv"><div class="k">💼 Đã tạm ứng</div><div class="v">' + money(m.advanceTotal) + '</div></div>' +
-      '<div class="kv"><div class="k">🧾 Thực chi</div><div class="v">' + money(m.spentTotal) + '</div></div>' +
-      '<div class="kv"><div class="k">📂 Dư kỳ trước</div><div class="v">' + money(m.prevBalance) + '</div></div>' +
-      '<div class="kv big"><div class="k">' + (owed ? '➕ Đề nghị thanh toán thêm' : '💰 Tạm ứng còn dư') + '</div>' +
+      '<div class="kv"><div class="k">Đã tạm ứng</div><div class="v">' + money(m.advanceTotal) + '</div></div>' +
+      '<div class="kv"><div class="k">Thực chi</div><div class="v">' + money(m.spentTotal) + '</div></div>' +
+      '<div class="kv"><div class="k">Dư kỳ trước</div><div class="v">' + money(m.prevBalance) + '</div></div>' +
+      '<div class="kv big"><div class="k">' + (owed ? 'Đề nghị thanh toán thêm' : 'Tạm ứng còn dư') + '</div>' +
       '<div class="v ' + (owed ? 'neg' : 'pos') + '">' + money(payAmt) + '</div></div>' +
       '<div class="hint words">' + U.docSoCau(payAmt) + '</div>' +
       '</div>' +
 
-      '<button class="btn btn-primary" data-act="genPdfThanhToan">📕 Hồ sơ thanh toán đầy đủ (PDF: đề nghị + bảng kê + ảnh)</button>' +
+      '<button class="btn btn-primary" data-act="genPdfThanhToan">Hồ sơ thanh toán đầy đủ (PDF: đề nghị + bảng kê + ảnh)</button>' +
       '<div class="btn-row mt8">' +
-      '<button class="btn btn-soft" data-act="genThanhToan">📄 Giấy đề nghị (Word)</button>' +
-      '<button class="btn btn-line" data-act="genExcel">📗 Xuất Excel</button></div>' +
+      '<button class="btn btn-soft" data-act="genThanhToan">Giấy đề nghị (Word)</button>' +
+      '<button class="btn btn-line" data-act="genExcel">Xuất Excel</button></div>' +
 
       App.renderAttachments(App.view.images, 'thanhtoan', 'File đề nghị thanh toán đính kèm') +
       '<div style="height:6px"></div>';
