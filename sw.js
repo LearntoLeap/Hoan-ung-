@@ -1,7 +1,7 @@
 /* Service worker — Learn to Leap · Tạm ứng & Hoàn ứng
    Offline-first: precache app shell, runtime-cache heavy libs on first use. */
 'use strict';
-const VERSION = 'ltl-v22';
+const VERSION = 'ltl-v23';
 const CORE = 'ltl-core-' + VERSION;
 const RUNTIME = 'ltl-rt-' + VERSION;
 
@@ -19,6 +19,7 @@ const SHELL = [
   './assets/admin.js',
   './assets/trash.js',
   './assets/report.js',
+  './assets/demo.js',
   './assets/logo-mark.png',
   './assets/logo-ltl-sm.png',
   './assets/screen-dashboard.js',

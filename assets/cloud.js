@@ -36,7 +36,9 @@
   Cloud.ready = () => !!(Cloud.client && Cloud.user && navigator.onLine && !Cloud.demo);
   // Chế độ demo CHỈ dùng khi chạy thử trên máy (localhost): không kết nối đám mây.
   const LOCAL_DEV = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
-  if (LOCAL_DEV && /[?&]demo=(1|admin)/.test(location.search)) { try { sessionStorage.setItem('ltl_demo', /demo=admin/.test(location.search) ? 'admin' : '1'); } catch (e) {} }
+  if (LOCAL_DEV && /[?&]demo=(1|admin)/.test(location.search)) { try { localStorage.setItem('ltl_demo', /demo=admin/.test(location.search) ? 'admin' : '1'); } catch (e) {} }
+  // Dùng thử: chạy hoàn toàn trên máy, không cần tài khoản, không đồng bộ
+  Cloud.isDemo = () => !!Cloud.demo;
 
   async function ensureClient() {
     if (Cloud.client) return Cloud.client;
@@ -102,7 +104,7 @@
     return data;
   }
   async function signOut() {
-    if (Cloud.demo) { try { sessionStorage.removeItem('ltl_demo'); } catch (e) {} Cloud.demo = false; }
+    if (Cloud.demo) { try { localStorage.removeItem('ltl_demo'); } catch (e) {} Cloud.demo = false; }
     try { if (Cloud.ready()) await sync(); } catch (e) {}
     if (Cloud.client) { try { await Cloud.client.auth.signOut(); } catch (e) {} }
     Cloud.user = null; Cloud.isAdmin = false;
@@ -298,9 +300,9 @@
 
   /* ----------------------------- Khởi động ----------------------------- */
   Cloud.init = async function () {
-    let demo = ''; try { demo = LOCAL_DEV ? sessionStorage.getItem('ltl_demo') || '' : ''; } catch (e) {}
+    let demo = ''; try { demo = localStorage.getItem('ltl_demo') || ''; if (demo === 'admin' && !LOCAL_DEV) demo = '1'; } catch (e) {}
     if (demo) {
-      Cloud.demo = true; Cloud.user = { id: 'local-demo', email: 'demo@localhost', user_metadata: { full_name: 'Người dùng demo' } };
+      Cloud.demo = true; Cloud.user = { id: 'local-demo', email: 'dung-thu@may-nay', user_metadata: { full_name: 'Người dùng thử' } };
       Cloud.isAdmin = demo === 'admin';
       await enforceAccount(Cloud.user.id); await App.ensureSettings(); setState('ok');
       return;
@@ -344,7 +346,9 @@
           '<label class="switch" style="margin:-2px 0 14px"><input type="checkbox" checked disabled> Ghi nhớ đăng nhập trên máy này</label>' +
           '<button class="btn block lg" type="submit" id="au-go">Đăng nhập</button></form>' +
           '<div class="center mt16 muted" style="font-size:13.5px">Chưa có tài khoản? <a href="#" data-act="authTab:signup"><b class="grad-text">Tạo tài khoản</b></a></div>' +
-          '<div class="center mt8"><button class="btn ghost sm" data-act="forgotPass" style="text-transform:none">Quên mật khẩu?</button></div>'
+          '<div class="center mt8"><button class="btn ghost sm" data-act="forgotPass" style="text-transform:none">Quên mật khẩu?</button></div>' +
+          '<div class="sn-hr" style="margin:18px 0"></div><button class="btn out block" data-act="tryDemo">' + I('sparkle') + 'Dùng thử không cần tài khoản</button>' +
+          '<p class="muted center" style="font-size:12px;margin:8px 0 0">Chạy ngay trên máy này, không đồng bộ. Có sẵn nút nạp dữ liệu mẫu.</p>'
         : '<h2 class="t">Tạo tài khoản</h2><p class="lead">Mỗi người tự tạo tài khoản bằng email công việc. Thông tin này được điền sẵn vào phiếu.</p>' +
           '<form id="auth-form" novalidate>' + ui.text('au-name', 'Họ và tên', '', { auto: 'name', ph: 'Nguyễn Văn A', req: true }) +
           ui.text('au-dept', 'Bộ phận', '', { list: 'au-dl', ph: 'Chọn hoặc gõ bộ phận' }) + ui.datalist('au-dl', App.DEFAULT_SETTINGS.boPhanList) +
@@ -438,6 +442,12 @@
   /* ----------------------------- Actions ----------------------------- */
   Object.assign(App.actions, {
     authTab(t) { authTab = t; App.render(); },
+    async tryDemo() {
+      try { localStorage.setItem('ltl_demo', '1'); } catch (e) {}
+      await Cloud.init();
+      await App.afterLogin();
+      App.toast('Đang dùng thử — dữ liệu chỉ lưu trên máy này', 'ok');
+    },
     async forgotPass() {
       const email = App.val('au-email');
       if (!/^\S+@\S+\.\S+$/.test(email)) { App.toast('Nhập email ở ô trên trước', 'err'); return; }
@@ -450,6 +460,10 @@
     },
     async syncNow() { try { await sync({ loud: true }); } catch (e) {} },
     logout() {
+      if (Cloud.demo) {
+        App.confirmSheet('Thoát dùng thử?', 'Toàn bộ dữ liệu bạn nhập thử trên máy này sẽ bị xoá.', async () => { await signOut(); App.afterLogout(); }, true, 'Thoát dùng thử');
+        return;
+      }
       App.confirmSheet('Đăng xuất?', 'Dữ liệu đã được đồng bộ lên đám mây và sẽ được xoá khỏi máy này để bảo mật. Đăng nhập lại sẽ tự tải về.', async () => {
         App.toast('Đang đăng xuất…');
         await signOut();

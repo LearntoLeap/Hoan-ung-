@@ -51,7 +51,7 @@
     acts.sort((a, b) => String(b.t || '').localeCompare(String(a.t || '')));
     const tl = acts.slice(0, 7).map((a) => '<a class="tl" href="' + a.href + '"><span class="td ' + a.c + '">' + I(a.ic) + '</span><span style="min-width:0"><b>' + esc(a.b) + '</b><small>' + esc(a.t ? U.fmtDateTime(a.t) : '') + '</small></span></a>').join('');
 
-    root.innerHTML =
+    root.innerHTML = (App.demoBanner ? App.demoBanner() : '') +
       (!s.hoTen || !s.soTK ? '<div class="alert warn" style="margin-bottom:20px">' + I('alert') + '<div><b>Hoàn thiện hồ sơ cá nhân</b> (họ tên, bộ phận, số tài khoản) để phiếu được điền sẵn. <a href="#/ca-nhan">Mở hồ sơ →</a></div></div>' : '') +
       '<div class="kpis k4">' +
       kpi('#/tam-ung', 'file', 'Tạm ứng tháng này', money(tuM), pctTxt(tuM, tuP)) +
