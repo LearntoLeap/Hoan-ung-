@@ -90,6 +90,6 @@ select u.id, u.email, coalesce(u.raw_user_meta_data ->> 'full_name', ''), u.crea
 from auth.users u
 on conflict (id) do nothing;
 
--- 5) ĐẶT TÀI KHOẢN QUẢN TRỊ — thay email bên dưới rồi chạy
-insert into public.ltl_admins (email) values ('ADMIN_EMAIL@learntoleap.vn')
+-- 5) TÀI KHOẢN QUẢN TRỊ (thêm dòng tương tự nếu cần nhiều admin)
+insert into public.ltl_admins (email) values ('learntoleap.2023@gmail.com')
 on conflict (email) do nothing;
