@@ -409,5 +409,5 @@
     }
   }
 
-  App.Export = { word, excel };
+  App.Export = { word, excel, _buildSheet: buildSheet, _logoBytes: logoBytes, _sheetName: sheetName, _isoToDate: isoToDate };
 })();

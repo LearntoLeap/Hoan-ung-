@@ -124,12 +124,12 @@
     },
     delEvent(id) {
       const n = App.expensesOf(id).length;
-      App.confirmSheet('Xoá sự kiện?', 'Sẽ xoá ' + n + ' khoản chi và ảnh minh chứng của sự kiện. Các phiếu đã lập vẫn được giữ lại (bỏ liên kết sự kiện).', async () => {
-        await DB.delEventCascade(id);
+      App.confirmSheet('Chuyển sự kiện vào thùng rác?', 'Sự kiện cùng ' + n + ' khoản chi sẽ vào thùng rác, khôi phục được trong ' + App.TRASH_DAYS + ' ngày. Các phiếu đã lập vẫn giữ nguyên.', async () => {
         if (localStorage.getItem('ltl_event') === id) localStorage.removeItem('ltl_event');
-        App.closeAllSheets(); App.toast('Đã xoá sự kiện', 'ok');
-        if (App.route.name === 'chi-tieu') App.nav('chi-tieu'); else App.reload();
-      }, true, 'Xoá sự kiện');
+        App.closeAllSheets();
+        if (App.route.name === 'chi-tieu') App.nav('chi-tieu');
+        await App.Trash.soft([{ store: 'events', id }]);
+      }, true, 'Chuyển vào thùng rác');
     },
     async saveProfile() {
       const s = App.settings;

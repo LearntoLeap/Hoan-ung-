@@ -63,7 +63,7 @@
         '<td class="acts"><a class="btn out xs" href="#/tai-khoan/' + p.id + '">' + I('eye') + 'Xem</a></td></tr>';
     }).join('');
     root.innerHTML = App.pageHead('Quản lý tài khoản', 'Danh sách mọi tài khoản đang sử dụng — chế độ chỉ đọc để kiểm soát. Cập nhật lúc ' + esc(U.fmtDateTime(data.at.toISOString())) + '.',
-      '<button class="btn out" data-act="adminRefresh">' + I('refresh') + 'Làm mới</button>') +
+      '<button class="btn accent" data-act="adminReportAll">' + I('excel') + 'Xuất tổng tất cả tài khoản</button><button class="btn out" data-act="adminRefresh">' + I('refresh') + 'Làm mới</button>') +
       '<div class="kpis k4">' + App.kpi('users', 'Tài khoản', profiles.length, active7 + ' hoạt động 7 ngày qua') +
       App.kpi('file', 'Tổng số phiếu', tot('docs'), 'TU ' + tot('TU') + ' · HU ' + tot('HU') + ' · TT ' + tot('TT')) +
       App.kpi('wallet', 'Giá trị phiếu', money(tot('amount')), '') + App.kpi('receipt', 'Tổng khoản chi', money(tot('spent')), tot('expenses') + ' khoản') + '</div>' +
@@ -90,6 +90,7 @@
     const events = pick('event'); const exps = pick('expense').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const st = pick('settings')[0] || {};
     App.adminDocs = docs;
+    App.adminOwner = { name: p.full_name || st.hoTen || p.email, email: p.email, dept: p.dept || st.boPhan, events, docs, expenses: exps, settings: st };
     App.adminOwnerSettings = st;
     const D = App.Docs;
     const evName = (id) => (events.find((e) => e.id === id) || {}).name || '';
@@ -110,7 +111,8 @@
 
     root.innerHTML = '<div class="crumbs"><a href="#/tai-khoan">' + I('left', 14) + 'Quản lý tài khoản</a><span>/</span><span>' + esc(p.full_name || p.email) + '</span></div>' +
       App.pageHead(esc(p.full_name || st.hoTen || p.email), esc(p.email || '') + (p.dept ? ' · ' + esc(p.dept) : '') + ' · <span class="badge out">Chỉ đọc</span>',
-        (docs.length ? '<button class="btn out" data-act="adminExcelAll">' + I('excel') + 'Xuất Excel tất cả phiếu</button>' : '') +
+        '<button class="btn accent" data-act="adminReportOwner:excel">' + I('chart') + 'Báo cáo tổng (Excel)</button><button class="btn out" data-act="adminReportOwner:word">' + I('word') + 'Báo cáo Word</button>' +
+        (docs.length ? '<button class="btn out" data-act="adminExcelAll">' + I('excel') + 'Từng phiếu theo mẫu</button>' : '') +
         '<button class="btn out" data-act="adminRefreshOwner:' + ownerId + '">' + I('refresh') + 'Làm mới</button>') +
       '<div class="kpis k4">' + App.kpi('file', 'Tạm ứng', money(sumT('TU')), docs.filter((d) => d.type === 'TU').length + ' phiếu') +
       App.kpi('wallet', 'Hoàn ứng', money(sumT('HU')), docs.filter((d) => d.type === 'HU').length + ' phiếu') +
@@ -133,6 +135,37 @@
       App.openSheet(App.sheetHead(d.soPhieu, (d.nguoiDeNghi || '') + ' · chỉ đọc') + App.Docs.previewBox(d) +
         '<div class="sheet-f"><button class="btn out" data-act="adminPrint:' + id + '">' + I('printer') + 'In / PDF</button><button class="btn out" data-act="docWord:' + id + '">' + I('word') + 'Word</button><button class="btn" data-act="docExcel:' + id + '">' + I('excel') + 'Excel</button></div>', { wide: true });
       setTimeout(App.Docs.fitPaper, 30);
+    },
+    async adminReportOwner(kind) {
+      const o = App.adminOwner; if (!o) return;
+      const r = App.Report.build({ events: o.events, docs: o.docs, expenses: o.expenses, images: [], settings: App.settings, owner: { name: o.name, email: o.email, dept: o.dept } }, {});
+      App.toast('Đang tạo báo cáo của ' + o.name + '…');
+      if (kind === 'word') await App.Report.word(r, { images: false }); else await App.Report.excel(r, {});
+    },
+    async adminReportAll() {
+      App.toast('Đang tải dữ liệu mọi tài khoản…');
+      let rows;
+      try { rows = await App.cloud.admin.allData(); } catch (e) { App.toast('Lỗi: ' + (e.message || e), 'err'); return; }
+      const list = await loadList(false);
+      const nameOf = {}; list.profiles.forEach((p) => { nameOf[p.id] = p; });
+      const by = {};
+      rows.forEach((x) => {
+        const o = by[x.owner] || (by[x.owner] = { events: [], docs: [], expenses: [], settings: {} });
+        const rec = Object.assign({}, x.data, { id: x.id });
+        if (x.kind === 'event') o.events.push(rec); else if (x.kind === 'doc') o.docs.push(rec); else if (x.kind === 'expense') o.expenses.push(rec); else if (x.kind === 'settings') o.settings = rec;
+      });
+      const all = { events: [], docs: [], expenses: [] }; const people = [];
+      Object.keys(by).forEach((id) => {
+        const o = by[id], p = nameOf[id] || {};
+        const name = p.full_name || o.settings.hoTen || p.email || id.slice(0, 8);
+        o.expenses.forEach((e) => { e._owner = name; });
+        all.events.push(...o.events); all.docs.push(...o.docs); all.expenses.push(...o.expenses);
+        const r1 = App.Report.build({ events: o.events, docs: o.docs, expenses: o.expenses, settings: App.settings }, {});
+        people.push({ name, email: p.email || '', dept: p.dept || o.settings.boPhan || '', docs: r1.docs.length, tu: r1.tu, hu: r1.hu, tt: r1.tt, spent: r1.spent, count: r1.expenses.length });
+      });
+      people.sort((a, b) => b.spent - a.spent);
+      const r = App.Report.build(Object.assign(all, { settings: App.settings, owner: { name: 'Tất cả tài khoản (' + people.length + ')', dept: 'Quản trị' } }), {});
+      await App.Report.excel(r, { people, filename: 'Bao-cao-tong-tat-ca-tai-khoan-' + U.todayISO() + '.xlsx' });
     },
     adminPrint(id) { const d = (App.adminDocs || []).find((x) => x.id === id); if (d) App.Docs.print(d); },
     async adminExcelAll() {

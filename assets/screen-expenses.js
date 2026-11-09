@@ -25,7 +25,7 @@
     cam.className = 'cam';
     cam.innerHTML =
       '<div class="cam-top"><button class="cbtn" id="cam-x" aria-label="Đóng">' + I('x') + '</button><button class="cbtn" id="cam-flip" aria-label="Đổi camera">' + I('refresh') + '</button></div>' +
-      '<video id="cam-v" autoplay playsinline muted></video>' +
+      '<video id="cam-v" autoplay playsinline muted></video><div class="flash"></div>' +
       '<div class="cam-bot"><button class="cbtn" id="cam-lib" aria-label="Chọn từ thư viện">' + I('image') + '</button>' +
       '<button class="shutter" id="cam-shot" aria-label="Chụp"></button><div style="width:46px"></div></div>';
     root.appendChild(cam);
@@ -39,6 +39,8 @@
       const c = document.createElement('canvas');
       c.width = video.videoWidth; c.height = video.videoHeight;
       c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+      const fl = cam.querySelector('.flash'); fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go');
+      if (navigator.vibrate) navigator.vibrate(30);
       c.toBlob((blob) => { if (blob) { onCapture([blob]); App.toast('Đã chụp', 'ok'); } }, 'image/jpeg', 0.88);
     };
     function start() {
@@ -108,7 +110,8 @@
     };
     const itemHTML = (e) => {
       const imgs = byExp[e.id] || []; const th = imgs.find((x) => x.kind === 'image' && x.blob);
-      return '<div class="exp" data-act="editExpense:' + e.id + '"><div class="thumb">' + (th ? '<img src="' + App.imgURL(th) + '" alt="">' : I('receipt')) + '</div>' +
+      return '<div class="exp" data-act="editExpense:' + e.id + '"><label class="chk" title="Chọn"><input type="checkbox" class="selc" value="' + e.id + '" aria-label="Chọn khoản chi"></label>' +
+        '<div class="thumb"' + (th ? ' data-act="expPhotos:' + e.id + '" title="Xem ảnh" style="cursor:zoom-in"' : '') + '>' + (th ? '<img src="' + App.imgURL(th) + '" alt="">' + (imgs.length > 1 ? '<span class="n">+' + (imgs.length - 1) + '</span>' : '') : I('receipt')) + '</div>' +
         '<div class="body"><div class="top"><div class="title">' + esc(e.content || '(chưa có nội dung)') + '</div><div class="amt">' + money(e.amount) + '</div></div>' +
         '<div class="meta"><span>' + esc(U.fmtDate(e.date)) + '</span>' + App.vatBadge(e) +
         (imgs.length ? '<span class="badge out">' + I('image', 12) + imgs.length + ' ảnh</span>' : '<span class="badge warn">Thiếu ảnh</span>') +
@@ -152,9 +155,17 @@
     App._repaintExp = () => {
       const l = document.getElementById('exp-list'); if (l) l.innerHTML = listHTML();
       const c = document.getElementById('exp-chips'); if (c) c.innerHTML = chips();
+      App.Sel.paint();
     };
     const si = document.getElementById('exp-search');
     if (si) si.oninput = () => { f.q = si.value; App._repaintExp(); };
+    App.Sel.init('exp-' + evId, (ids) => {
+      const sum = App.data.expenses.filter((x) => ids.includes(x.id)).reduce((a, x) => a + U.toNumber(x.amount), 0);
+      return '<span style="opacity:.8;margin-right:4px">' + money(sum) + '</span>' +
+        '<button class="btn out sm" data-act="selExpDoc:HU">' + I('wallet') + 'Lập hoàn ứng</button>' +
+        '<button class="btn out sm" data-act="selExpDoc:TT">' + I('calc') + 'Lập thanh toán</button>' +
+        '<button class="btn danger sm" data-act="selExpTrash">' + I('trash') + 'Xoá</button>';
+    });
   };
 
   /* ----------------- Editor khoản chi ----------------- */
@@ -163,9 +174,10 @@
     (d.images || []).forEach((im) => {
       const url = App.imgURL(im);
       const inner = im.kind === 'video' ? '<video src="' + url + '" muted playsinline></video><span class="vbadge">video</span>' : '<img src="' + url + '" alt="">';
-      s += '<div class="it" data-act="editImg:' + im.id + '">' + inner +
+      s += '<div class="it" data-act="viewImg:' + im.id + '">' + inner +
         (im.amount ? '<span class="vbadge" style="left:auto;right:6px">' + U.groupThousand(im.amount) + '</span>' : '') +
-        '<button class="del" data-act="rmImg:' + im.id + '" aria-label="Xoá ảnh">' + I('x', 14) + '</button></div>';
+        '<button class="ed" data-act="editImg:' + im.id + '" aria-label="Ghi chú ảnh" title="Ghi chú">' + I('edit', 13) + '</button>' +
+        '<button class="del" data-act="rmImg:' + im.id + '" aria-label="Xoá ảnh" title="Xoá ảnh">' + I('x', 14) + '</button></div>';
     });
     s += '<div class="add" data-act="addImg">' + I('plus') + '<small>Camera / Thư viện</small></div></div>';
     return s;
@@ -265,11 +277,24 @@
     },
     imgFromCam() { App.closeSheet(); openCamera((b) => addImages(b)); },
     async imgFromLib() { App.closeSheet(); const fs = await App.pickFiles('image/*,video/*', true); if (fs.length) addImages(fs); },
-    delExpense(id) {
-      App.confirmSheet('Xoá khoản chi?', 'Khoản chi và toàn bộ minh chứng sẽ bị xoá.', async () => {
-        await DB.delExpense(id); App.draftExpense = null;
-        App.closeAllSheets(); App.toast('Đã xoá khoản chi', 'ok'); App.reload();
-      }, true, 'Xoá');
+    async delExpense(id) {
+      App.draftExpense = null; App.closeAllSheets();
+      await App.Trash.soft([{ store: 'expenses', id }]);
+    },
+    async selExpTrash() { const ids = App.Sel.list(); await App.Trash.soft(ids.map((id) => ({ store: 'expenses', id }))); },
+    selExpDoc(type) {
+      const ids = App.Sel.list(); if (!ids.length) return;
+      const ev = (App.data.expenses.find((x) => x.id === ids[0]) || {}).eventId || '';
+      location.hash = '#/phieu/moi/' + type + '?event=' + ev + '&exp=' + ids.join(',');
+    },
+    expPhotos(id, node) {
+      const imgs = App.data.images.filter((x) => x.expenseId === id);
+      App.lightbox(App.imageItems(imgs), 0, node.querySelector('img') || node);
+    },
+    viewImg(id, node) {
+      const d = App.draftExpense; if (!d) return;
+      const list = d.images.filter((x) => x.kind === 'image' || x.kind === 'video');
+      App.lightbox(App.imageItems(list), Math.max(0, list.findIndex((x) => x.id === id)), node.querySelector('img') || node);
     },
   });
 })();

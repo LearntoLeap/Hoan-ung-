@@ -31,10 +31,13 @@
       '<td class="num b" data-l="Số tiền">' + money(D.total(d)) + '</td><td data-l="Trạng thái"><span class="badge ' + stCls(d).cls + '">' + stCls(d).t + '</span></td></tr>').join('');
 
     root.innerHTML =
-      '<div class="page-h"><div><h1>' + hello + ', <span class="grad-text">' + esc(s.hoTen || 'bạn') + '</span></h1>' +
-      '<p>' + esc(U.fmtDate(U.todayISO())) + ' · ' + docs.length + ' phiếu · ' + App.data.events.length + ' sự kiện · ' + exps.length + ' khoản chi</p></div>' +
-      '<div class="actions"><a class="btn out" href="#/phieu/moi/TU">' + I('file') + 'Phiếu tạm ứng</a><a class="btn out" href="#/phieu/moi/HU">' + I('wallet') + 'Phiếu hoàn ứng</a>' +
-      '<a class="btn accent" href="#/phieu/moi/TT">' + I('plus') + 'Phiếu thanh toán</a></div></div>' +
+      '<section class="hero"><span class="blob b1"></span><span class="blob b2"></span><img class="wm" src="assets/logo-mark.png" alt="">' +
+      '<div class="hero-c"><div><div style="font-size:13px;opacity:.85;display:flex;align-items:center;gap:6px">' + I('sparkle', 15) + esc(U.fmtDate(U.todayISO())) + '</div>' +
+      '<h1>' + hello + ', ' + esc(s.hoTen || 'bạn') + '</h1>' +
+      '<p>Quản lý tạm ứng · hoàn ứng · thanh toán theo mẫu ' + esc(s.mauSo) + ' của Learn to Leap.</p>' +
+      '<div class="hstats"><div><b>' + docs.length + '</b>phiếu</div><div><b>' + App.data.events.length + '</b>sự kiện</div><div><b>' + exps.length + '</b>khoản chi</div><div><b>' + pending.length + '</b>chờ xử lý</div></div></div>' +
+      '<div class="actions"><a class="btn glass" href="#/phieu/moi/TU">' + I('file') + 'Tạm ứng</a><a class="btn glass" href="#/phieu/moi/HU">' + I('wallet') + 'Hoàn ứng</a>' +
+      '<a class="btn white" href="#/phieu/moi/TT">' + I('plus') + 'Phiếu thanh toán</a><a class="btn glass" href="#/bao-cao">' + I('chart') + 'Báo cáo</a></div></div></section>' +
       (!s.hoTen || !s.soTK ? '<div class="alert warn" style="margin-bottom:16px">' + I('alert') + '<div><b>Hoàn thiện hồ sơ cá nhân</b> (họ tên, bộ phận, số tài khoản) để phiếu được điền sẵn. <a href="#/ca-nhan">Mở hồ sơ →</a></div></div>' : '') +
       '<div class="kpis k5">' +
       kpiLink('#/tam-ung', 'file', 'Đã đề nghị tạm ứng', money(sumT('TU')), docs.filter((d) => d.type === 'TU').length + ' phiếu', openTU.length ? openTU.length + ' phiếu chưa hoàn ứng' : 'Đã quyết toán hết') +
@@ -70,8 +73,10 @@
     buildCharts();
   };
 
+  const KC = { file: '', receipt: 'c2', wallet: 'c3', calc: '', alert: 'c4' };
   function kpiLink(href, ic, label, value, sub, foot) {
-    return '<a class="kpi" href="' + href + '" style="color:inherit"><div class="l">' + I(ic) + esc(label) + '</div><div class="v">' + value + '</div>' +
+    const cls = KC[ic] || '';
+    return '<a class="kpi ' + cls + '" href="' + href + '"><div class="l"><span class="ki">' + I(ic) + '</span>' + esc(label) + '</div><div class="v">' + value + '</div>' +
       '<div class="s">' + sub + '</div>' + (foot ? '<div class="f">' + esc(foot) + '</div>' : '') + '</a>';
   }
 

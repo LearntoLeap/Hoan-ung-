@@ -67,6 +67,12 @@
     list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
     send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
     database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/>',
+    chart: '<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>',
+    restore: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+    sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 17l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>',
+    zoom: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/>',
+    grid4: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    square: '<rect x="3" y="3" width="18" height="18" rx="3"/>',
   };
   function icon(name, size) {
     size = size || 18;
@@ -82,17 +88,22 @@
     { r: 'hoan-ung', label: 'Hoàn ứng', ic: 'wallet' },
     { r: 'thanh-toan', label: 'Thanh toán', ic: 'calc' },
     { r: 'su-kien', label: 'Sự kiện', ic: 'calendar' },
+    { r: 'bao-cao', label: 'Báo cáo', ic: 'chart' },
     { r: 'tai-khoan', label: 'Tài khoản', ic: 'users', admin: true },
   ];
   const MENU_MORE = [
+    { r: 'thung-rac', label: 'Thùng rác', ic: 'trash', trash: true },
     { r: 'ca-nhan', label: 'Hồ sơ cá nhân', ic: 'user' },
     { r: 'cai-dat', label: 'Cấu hình mẫu phiếu', ic: 'settings' },
     { r: 'huong-dan', label: 'Hướng dẫn sử dụng', ic: 'help' },
     { act: 'downloadBlank', label: 'Tải mẫu Excel trống', ic: 'download' },
     { act: 'exportData', label: 'Sao lưu dữ liệu (JSON)', ic: 'database' },
   ];
-  // route con → mục menu cha để tô sáng
-  const ROUTE_PARENT = { phieu: null };
+  const BNAV = ['', 'tam-ung', 'chi-tieu', 'hoan-ung'];
+  const ROUTE_ICON = { phieu: 'file', 'ca-nhan': 'user', 'cai-dat': 'settings', 'huong-dan': 'help', 'thung-rac': 'trash' };
+  App.routeIcon = (name) => ROUTE_ICON[name] || ((MENU.find((m) => m.r === name) || {}).ic) || 'grid';
+  const TRASH_DAYS = 30;
+  App.TRASH_DAYS = TRASH_DAYS;
 
   /* ----------------------------- Cài đặt mặc định (tab "Cấu hình" của mẫu) ----------------------------- */
   const DEFAULT_SETTINGS = {
@@ -142,7 +153,7 @@
     const dark = t === 'dark' || (t === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.classList.toggle('dark', dark);
     const m = document.querySelector('meta[name="theme-color"]');
-    if (m) m.setAttribute('content', dark ? '#0b1220' : '#ffffff');
+    if (m) m.setAttribute('content', dark ? '#140b1c' : '#ffffff');
     return dark;
   }
   App.isDark = () => document.documentElement.classList.contains('dark');
@@ -152,14 +163,22 @@
   }
 
   /* ----------------------------- Toast / sheet / confirm ----------------------------- */
-  function toast(msg, type) {
+  // toast(msg, 'ok'|'err', { label: 'Hoàn tác', fn }) — nút thao tác tuỳ chọn
+  function toast(msg, type, action) {
     const root = document.getElementById('toast-root');
     const t = document.createElement('div');
     t.className = 'toast ' + (type || '');
-    t.textContent = msg;
+    const sp = document.createElement('span'); sp.textContent = msg; t.appendChild(sp);
+    const life = action ? 6500 : type === 'err' ? 4500 : 2600;
+    const kill = () => { t.classList.add('out'); setTimeout(() => t.remove(), 260); };
+    if (action) {
+      const b = document.createElement('button'); b.className = 'tb'; b.textContent = action.label || 'Hoàn tác';
+      b.onclick = () => { kill(); try { action.fn(); } catch (e) {} };
+      t.appendChild(b);
+    }
     root.appendChild(t);
-    setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = '0'; }, type === 'err' ? 4200 : 2400);
-    setTimeout(() => t.remove(), type === 'err' ? 4600 : 2800);
+    while (root.children.length > 3) root.firstChild.remove();
+    setTimeout(kill, life);
   }
   App.toast = toast;
 
@@ -224,7 +243,21 @@
     events.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
     docs.sort((a, b) => (b.ngayLap || '').localeCompare(a.ngayLap || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
     expenses.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || '').localeCompare(b.createdAt || ''));
-    App.data = { events, docs, expenses, images };
+    // Thùng rác: bản ghi có deletedAt không hiện ở các trang, chỉ hiện trong Thùng rác
+    const live = (a) => a.filter((x) => !x.deletedAt), dead = (a) => a.filter((x) => x.deletedAt);
+    App.trash = { events: dead(events), docs: dead(docs), expenses: dead(expenses) };
+    const deadEv = new Set(App.trash.events.map((e) => e.id)), deadExp = new Set(App.trash.expenses.map((e) => e.id)), deadDoc = new Set(App.trash.docs.map((d) => d.id));
+    App.data = { events: live(events), docs: live(docs), expenses: live(expenses).filter((e) => !deadEv.has(e.eventId)),
+      images: images.filter((im) => !deadExp.has(im.expenseId) && !deadDoc.has(im.docId)) };
+    App.trashCount = App.trash.events.length + App.trash.docs.length + App.trash.expenses.filter((e) => !deadEv.has(e.eventId)).length;
+  }
+  // Xoá vĩnh viễn những gì nằm trong thùng rác quá 30 ngày
+  async function purgeOldTrash() {
+    const limit = Date.now() - TRASH_DAYS * 864e5;
+    const old = (x) => x.deletedAt && Date.parse(x.deletedAt) < limit;
+    for (const d of (await DB.all('docs')).filter(old)) await App.Trash.purge('docs', d);
+    for (const e of (await DB.all('expenses')).filter(old)) await App.Trash.purge('expenses', e);
+    for (const e of (await DB.all('events')).filter(old)) await App.Trash.purge('events', e);
   }
   App.loadData = loadData;
   App.eventById = (id) => App.data.events.find((e) => e.id === id) || null;
@@ -304,8 +337,10 @@
     App.route = parseHash();
     closeMenus();
     try { await loadData(); } catch (e) { toast('Không đọc được dữ liệu: ' + e.message, 'err'); }
-    render();
-    window.scrollTo(0, 0);
+    const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (document.startViewTransition && !reduce && document.getElementById('screen')) {
+      document.startViewTransition(() => { render(true); window.scrollTo(0, 0); });
+    } else { render(true); window.scrollTo(0, 0); }
   }
   App.go = go;
   App.reload = async function () {
@@ -319,18 +354,35 @@
   function isAdmin() { return !!(App.cloud && App.cloud.isAdmin); }
   App.isAdmin = isAdmin;
 
-  function navHTML(mobile) {
+  function navHTML() {
     const cur = App.route.name;
     const items = MENU.filter((m) => !m.admin || isAdmin());
+    const cnt = (m) => m.trash && App.trashCount ? '<span class="cnt">' + App.trashCount + '</span>' : '';
     const link = (m) => m.act
       ? '<button class="nav-a" data-act="' + m.act + '">' + icon(m.ic) + '<span>' + m.label + '</span></button>'
-      : '<a class="nav-a' + (isActive(m.r, cur) ? ' on' : '') + '" href="#/' + m.r + '">' + icon(m.ic) + '<span>' + m.label + '</span></a>';
-    if (mobile) {
-      return items.map(link).join('') + '<div class="menu-sep"></div>' + MENU_MORE.map(link).join('');
-    }
+      : '<a class="nav-a' + (isActive(m.r, cur) ? ' on' : '') + '" href="#/' + m.r + '">' + icon(m.ic) + '<span>' + m.label + '</span>' + cnt(m) + '</a>';
     return '<nav class="nav" aria-label="Điều hướng chính"><div class="nav-scroll">' + items.map(link).join('') + '</div>' +
-      '<div class="nav-more"><button class="nav-a' + (MENU_MORE.some((m) => m.r && m.r === cur) ? ' on' : '') + '" data-act="toggleMore" aria-haspopup="true">' + icon('more') + '<span>Thêm</span></button>' +
+      '<div class="nav-more"><button class="nav-a' + (MENU_MORE.some((m) => m.r && m.r === cur) ? ' on' : '') + '" data-act="toggleMore" aria-haspopup="true">' + icon('more') + '<span>Thêm</span>' + (App.trashCount ? '<span class="cnt">' + App.trashCount + '</span>' : '') + '</button>' +
       '<div class="menu-pop" id="more-pop">' + MENU_MORE.map(link).join('') + '</div></div></nav>';
+  }
+  function bottomNavHTML() {
+    const cur = App.route.name;
+    const it = (r) => { const m = MENU.find((x) => x.r === r); return '<a class="' + (isActive(r, cur) ? 'on' : '') + '" href="#/' + r + '"><span class="bi">' + icon(m.ic) + '</span>' + m.label + '</a>'; };
+    const moreOn = !BNAV.some((r) => isActive(r, cur));
+    return '<nav class="bnav" aria-label="Điều hướng nhanh">' + BNAV.map(it).join('') +
+      '<button class="' + (moreOn ? 'on' : '') + '" data-act="openMoreSheet"><span class="bi">' + icon('grid4') + '</span>Thêm</button></nav>';
+  }
+  function openMoreSheet() {
+    const cur = App.route.name;
+    const items = MENU.filter((m) => !BNAV.includes(m.r) && (!m.admin || isAdmin())).concat(MENU_MORE);
+    const tile = (m) => {
+      const inner = '<span class="mi">' + icon(m.ic, 20) + '</span>' + m.label + (m.trash && App.trashCount ? ' (' + App.trashCount + ')' : '');
+      return m.act ? '<button data-act="' + m.act + '">' + inner + '</button>' : '<a class="' + (isActive(m.r, cur) ? 'on' : '') + '" href="#/' + m.r + '">' + inner + '</a>';
+    };
+    const ov = openSheet(App.sheetHead('Tất cả chức năng') + '<div class="menu-grid">' + items.map(tile).join('') + '</div>' +
+      '<div class="btn-row mt16"><button class="btn out" data-act="toggleTheme">' + icon(App.isDark() ? 'sun' : 'moon') + (App.isDark() ? 'Nền sáng' : 'Nền tối') + '</button>' +
+      '<button class="btn danger-out" data-act="logout">' + icon('logout') + 'Đăng xuất</button></div>');
+    ov.addEventListener('click', (e) => { if (e.target.closest('a,[data-act=downloadBlank],[data-act=exportData],[data-act=toggleTheme]')) closeSheet(ov); });
   }
   function isActive(r, cur) {
     if (r === cur) return true;
@@ -348,30 +400,30 @@
     const name = s.hoTen || (u && u.user_metadata && u.user_metadata.full_name) || (u && u.email) || 'Tài khoản';
     const role = (isAdmin() ? 'Quản trị · ' : '') + (s.boPhan || (u && u.email) || '');
     const dark = App.isDark();
+    const ini = String(name).trim().split(/\s+/).slice(-2).map((w) => w.charAt(0)).join('').toUpperCase() || 'U';
     return '<header class="hdr"><div class="container hdr-in">' +
-      '<a class="brand" href="#/"><span class="brand-logo">LtL</span><span class="brand-t"><b>Tạm ứng <span>&amp;</span> Hoàn ứng</b><small>Learn to Leap</small></span></a>' +
-      navHTML(false) +
+      '<a class="brand" href="#/"><span class="brand-mark"><img src="assets/logo-mark.png" alt="Learn to Leap"></span><span class="brand-t"><b>Tạm ứng &amp; <span class="grad-text">Hoàn ứng</span></b><small>Learn to Leap</small></span></a>' +
+      navHTML() +
       '<div class="hdr-right">' +
-      '<div class="who"><b title="' + esc(name) + '">' + esc(name) + '</b><small title="' + esc(role) + '">' + esc(role) + '</small></div>' +
+      '<a class="who" href="#/ca-nhan" title="Hồ sơ cá nhân"><span class="av">' + esc(ini) + '</span><span class="wt"><b>' + esc(name) + '</b><small>' + esc(role) + '</small></span></a>' +
       '<button class="btn out icon" data-act="syncNow" title="Đồng bộ dữ liệu" aria-label="Đồng bộ"><span class="sync-dot" id="sync-dot"></span></button>' +
       '<button class="btn out icon" data-act="toggleTheme" title="' + (dark ? 'Chuyển sang nền sáng' : 'Chuyển sang nền tối') + '" aria-label="Đổi giao diện sáng/tối">' + icon(dark ? 'sun' : 'moon') + '</button>' +
-      '<button class="btn out icon" data-act="logout" title="Đăng xuất" aria-label="Đăng xuất">' + icon('logout') + '</button>' +
-      '<button class="btn out icon only-mobile" data-act="toggleMobileNav" aria-label="Mở menu">' + icon('menu') + '</button>' +
-      '</div></div>' +
-      '<nav class="container mnav" id="mnav" aria-label="Điều hướng (màn hình nhỏ)">' + navHTML(true) + '</nav>' +
-      '</header>';
+      '<button class="btn out icon hide-m" data-act="logout" title="Đăng xuất" aria-label="Đăng xuất">' + icon('logout') + '</button>' +
+      '</div></div></header>';
   }
 
-  function render() {
+  function render(anim) {
     Object.values(App.charts).forEach((c) => { try { c.destroy(); } catch (e) {} });
     App.charts = {};
     const app = document.getElementById('app');
     if (!App.user) { if (App.screens.login) App.screens.login(app); return; }
     app.innerHTML = headerHTML() +
-      '<main class="main"><div class="container fade-in" id="screen"></div></main>' +
-      '<footer class="foot"><div class="container">Learn to Leap — Tạm ứng · Hoàn ứng · Thanh toán theo mẫu 01-TT/LTL. Mỗi tài khoản chỉ xem dữ liệu của chính mình.</div></footer>';
+      '<main class="main"><div class="container' + (anim ? ' stagger' : '') + '" id="screen"></div></main>' +
+      '<footer class="foot"><div class="container"><img src="assets/logo-ltl-sm.png" alt="Learn to Leap"><span>Tạm ứng · Hoàn ứng · Thanh toán theo mẫu 01-TT/LTL. Mỗi tài khoản chỉ xem dữ liệu của chính mình.</span></div></footer>' +
+      bottomNavHTML();
     const screen = document.getElementById('screen');
     const name = App.route.name;
+    if (App.Sel) App.Sel.reset();
     const R = App.screens[name === '' ? 'dashboard' : name];
     if (R) {
       try { R(screen, App.route); }
@@ -389,17 +441,25 @@
 
   function closeMenus() {
     document.querySelectorAll('.menu-pop.open').forEach((p) => p.classList.remove('open'));
-    const m = document.getElementById('mnav'); if (m) m.classList.remove('open');
   }
+  // hiệu ứng gợn sóng khi bấm nút / mục menu
+  document.addEventListener('pointerdown', (e) => {
+    const b = e.target.closest('.btn,.nav-a,.bnav a,.bnav button,.catchip,.menu-grid a,.menu-grid button,.fab,.seg button');
+    if (!b || b.disabled) return;
+    const r = b.getBoundingClientRect(); const s = Math.max(r.width, r.height);
+    const sp = document.createElement('span'); sp.className = 'ripple';
+    sp.style.cssText = 'width:' + s + 'px;height:' + s + 'px;left:' + (e.clientX - r.left - s / 2) + 'px;top:' + (e.clientY - r.top - s / 2) + 'px';
+    b.appendChild(sp); setTimeout(() => sp.remove(), 600);
+  });
   document.addEventListener('pointerdown', (e) => {
     const pop = document.querySelector('.menu-pop.open');
     if (pop && !e.target.closest('.nav-more')) pop.classList.remove('open');
   });
 
   /* ----------------------------- Trang tiêu đề dùng chung ----------------------------- */
-  App.pageHead = function (title, sub, actions, crumbs) {
+  App.pageHead = function (title, sub, actions, crumbs, ic) {
     return (crumbs ? '<div class="crumbs">' + crumbs + '</div>' : '') +
-      '<div class="page-h"><div><h1>' + title + '</h1>' + (sub ? '<p>' + sub + '</p>' : '') + '</div>' +
+      '<div class="page-h"><div class="ph-l"><span class="page-ic">' + icon(ic || App.routeIcon(App.route.name)) + '</span><div style="min-width:0"><h1>' + title + '</h1>' + (sub ? '<p>' + sub + '</p>' : '') + '</div></div>' +
       (actions ? '<div class="actions">' + actions + '</div>' : '') + '</div>';
   };
   App.emptyState = function (ic, title, sub, btn) {
@@ -429,6 +489,7 @@
     App.user = App.cloud.user;
     await ensureSettings();
     try { await migrateLegacy(); } catch (e) { console.warn(e); }
+    try { await purgeOldTrash(); } catch (e) { console.warn(e); }
     await go();
   };
   App.afterLogout = function () {
@@ -453,7 +514,7 @@
   Object.assign(App.actions, {
     closeTop: () => closeSheet(),
     toggleMore() { const p = document.getElementById('more-pop'); if (p) p.classList.toggle('open'); },
-    toggleMobileNav() { const m = document.getElementById('mnav'); if (m) m.classList.toggle('open'); },
+    openMoreSheet() { openMoreSheet(); },
     toggleTheme() {
       const next = App.isDark() ? 'light' : 'dark';
       try { localStorage.setItem('ltl_theme', next); } catch (e) {}

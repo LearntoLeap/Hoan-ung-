@@ -251,7 +251,7 @@
         if (!all.length) return App.emptyState(T.ic, 'Chưa có phiếu ' + T.label.toLowerCase(), 'Bấm “Tạo phiếu” để lập phiếu theo đúng mẫu công ty. Số phiếu và số tiền bằng chữ được điền tự động.',
           '<a class="btn" href="#/phieu/moi/' + type + '">' + I('plus') + 'Tạo phiếu đầu tiên</a>');
         if (!rows.length) return App.emptyState('search', 'Không có phiếu phù hợp bộ lọc', 'Thử bỏ bớt điều kiện lọc.');
-        return '<div class="tbl-wrap"><table class="tbl cards"><thead><tr><th>Số phiếu</th><th>Ngày lập</th><th>Nội dung</th>' +
+        return '<div class="tbl-wrap"><table class="tbl cards"><thead><tr>' + App.chkAll() + '<th>Số phiếu</th><th>Ngày lập</th><th>Nội dung</th>' +
           (type === 'HU' ? '<th class="num">Đã tạm ứng</th>' : '') + '<th class="num">Số tiền</th>' + (type === 'HU' ? '<th>Kết luận</th>' : '') +
           '<th>Trạng thái</th><th class="acts"></th></tr></thead><tbody>' +
           rows.map((d) => {
@@ -268,7 +268,7 @@
                 : x.total > x.adv ? '<span class="badge danger">Chi bù ' + U.groupThousand(x.total - x.adv) + '</span>' : '<span class="badge ok">Khớp</span>') + '</td>';
             }
             const tuNote = type === 'TU' && settledBy[d.id] ? '<span class="sub">Đã hoàn ứng: ' + esc(settledBy[d.id].soPhieu) + '</span>' : '';
-            return '<tr class="click" data-href="#/phieu/' + d.id + '"><td data-l="Số phiếu"><span class="badge mono primary">' + esc(d.soPhieu || '—') + '</span></td>' +
+            return '<tr class="click" data-href="#/phieu/' + d.id + '">' + App.chk(d.id) + '<td data-l="Số phiếu"><span class="badge mono primary">' + esc(d.soPhieu || '—') + '</span></td>' +
               '<td data-l="Ngày lập" class="nowrap">' + esc(d.ngayLap ? U.fmtDate(d.ngayLap) : '—') + '</td>' +
               '<td data-l="Nội dung" style="min-width:220px">' + esc(d.noiDung || '(chưa có nội dung)') + '<span class="sub">' + (ev ? esc(ev.name) + ' · ' : '') + Docs.filledItems(d).length + ' dòng bảng kê</span>' + tuNote + '</td>' +
               hu + '<td class="num b" data-l="Số tiền">' + money(t) + '</td>' + concl +
@@ -276,16 +276,19 @@
               '<td class="acts"><button class="btn out xs" data-act="docWord:' + d.id + '" title="Xuất Word">' + I('word') + 'Word</button>' +
               '<button class="btn out xs" data-act="docExcel:' + d.id + '" title="Xuất Excel">' + I('excel') + 'Excel</button></td></tr>';
           }).join('') +
-          '</tbody><tfoot><tr><td colspan="' + (type === 'HU' ? 4 : 3) + '">Cộng ' + rows.length + ' phiếu</td><td class="num">' + money(sum) + '</td><td colspan="' + (type === 'HU' ? 3 : 2) + '"></td></tr></tfoot></table></div>';
+          '</tbody><tfoot><tr><td colspan="' + (type === 'HU' ? 5 : 4) + '">Cộng ' + rows.length + ' phiếu</td><td class="num">' + money(sum) + '</td><td colspan="' + (type === 'HU' ? 3 : 2) + '"></td></tr></tfoot></table></div>';
       }
 
-      const repaint = () => { const b = document.getElementById('lf-body'); if (b) b.innerHTML = tableHTML(); };
+      const repaint = () => { const b = document.getElementById('lf-body'); if (b) b.innerHTML = tableHTML(); App.Sel.paint(); };
       const q = document.getElementById('lf-q');
       q.oninput = () => { f.q = q.value; repaint(); };
       ['lf-ev', 'lf-st', 'lf-m'].forEach((id) => {
         document.getElementById(id).onchange = (e) => { f[{ 'lf-ev': 'ev', 'lf-st': 'st', 'lf-m': 'm' }[id]] = e.target.value; App.render(); };
       });
       App._listRows = () => all.filter(match);
+      App.Sel.init('docs-' + type, (ids) => '<button class="btn out sm" data-act="selDocsExcel">' + I('excel') + 'Xuất Excel</button>' +
+        '<button class="btn out sm" data-act="selDocsStatus">' + I('check') + 'Đổi trạng thái</button>' +
+        '<button class="btn danger sm" data-act="selDocsTrash">' + I('trash') + 'Xoá</button>');
     };
   }
   function selectBare(id, val, opts) {
@@ -293,8 +296,9 @@
       opts.map((o) => '<option value="' + esc(o.v) + '"' + (String(o.v) === String(val) ? ' selected' : '') + '>' + esc(o.t) + '</option>').join('') + '</select></div>';
   }
   App.selectBare = selectBare;
-  function kpi(ic, label, value, sub) {
-    return '<div class="kpi"><div class="l">' + I(ic) + esc(label) + '</div><div class="v">' + value + '</div>' + (sub ? '<div class="s">' + sub + '</div>' : '') + '</div>';
+  function kpi(ic, label, value, sub, cls) {
+    cls = cls || ['', 'c2', 'c3', 'c4'][String(ic).length % 4];
+    return '<div class="kpi lift ' + cls + '"><div class="l"><span class="ki">' + I(ic) + '</span>' + esc(label) + '</div><div class="v">' + value + '</div>' + (sub ? '<div class="s">' + sub + '</div>' : '') + '</div>';
   }
   App.kpi = kpi;
 
@@ -319,7 +323,11 @@
         draft._new = location.hash;
         if (route.q.from) prefillFromTU(draft, route.q.from);
         if (route.q.copy) prefillCopy(draft, route.q.copy);
-        if (route.q.event && type !== 'TU') importExpenses(draft, route.q.event, true);
+        if (route.q.exp) {
+          const ids = route.q.exp.split(',');
+          const exps = App.data.expenses.filter((e) => ids.includes(e.id));
+          if (exps.length) draft.items = exps.map((e) => Docs.itemFromExpense(e, App.settings));
+        } else if (route.q.event && type !== 'TU') importExpenses(draft, route.q.event, true);
         original = '';
       }
     } else {
@@ -360,14 +368,14 @@
   function itemRowsHTML() {
     return draft.items.map((it, i) =>
       '<tr data-i="' + i + '"><td class="ix">' + (i + 1) + '</td>' +
-      '<td style="min-width:200px"><textarea class="textarea" rows="1" data-f="noiDung" placeholder="Nội dung khoản chi">' + esc(it.noiDung) + '</textarea></td>' +
-      '<td style="width:140px"><input class="input" type="date" data-f="ngayChi" value="' + esc(it.ngayChi || '') + '"></td>' +
-      '<td style="min-width:120px"><input class="input" data-f="nguoiThamGia" value="' + esc(it.nguoiThamGia) + '" placeholder="VD: Giáp, Dũng"></td>' +
-      '<td style="width:70px"><input class="input" data-f="soLuong" inputmode="decimal" value="' + esc(it.soLuong) + '" placeholder="SL" style="text-align:center"></td>' +
-      '<td style="width:130px"><input class="input money" data-f="donGia" inputmode="numeric" data-money value="' + (U.toNumber(it.donGia) ? U.groupThousand(it.donGia) : '') + '" placeholder="0"></td>' +
-      '<td class="tt" data-tt="' + i + '">' + (Docs.lineTotal(it) ? U.groupThousand(Docs.lineTotal(it)) : '') + '</td>' +
-      '<td style="min-width:140px"><input class="input" data-f="ghiChu" value="' + esc(it.ghiChu) + '" placeholder="Hoá đơn số…"></td>' +
-      '<td style="width:36px;padding-top:8px"><button class="btn ghost icon xs" data-act="itemDel:' + i + '" title="Xoá dòng" aria-label="Xoá dòng">' + I('trash') + '</button></td></tr>'
+      '<td class="wide" data-l="Nội dung" style="min-width:200px"><textarea class="textarea" rows="1" data-f="noiDung" placeholder="Nội dung khoản chi">' + esc(it.noiDung) + '</textarea></td>' +
+      '<td data-l="Ngày chi" style="width:140px"><input class="input" type="date" data-f="ngayChi" value="' + esc(it.ngayChi || '') + '"></td>' +
+      '<td data-l="Người tham gia" style="min-width:120px"><input class="input" data-f="nguoiThamGia" value="' + esc(it.nguoiThamGia) + '" placeholder="VD: Giáp, Dũng"></td>' +
+      '<td data-l="Số lượng" style="width:70px"><input class="input" data-f="soLuong" inputmode="decimal" value="' + esc(it.soLuong) + '" placeholder="SL" style="text-align:center"></td>' +
+      '<td data-l="Đơn giá" style="width:130px"><input class="input money" data-f="donGia" inputmode="numeric" data-money value="' + (U.toNumber(it.donGia) ? U.groupThousand(it.donGia) : '') + '" placeholder="0"></td>' +
+      '<td class="tt" data-l="Thành tiền" data-tt="' + i + '">' + (Docs.lineTotal(it) ? U.groupThousand(Docs.lineTotal(it)) : '') + '</td>' +
+      '<td class="wide" data-l="Ghi chú" style="min-width:140px"><input class="input" data-f="ghiChu" value="' + esc(it.ghiChu) + '" placeholder="Hoá đơn số…"></td>' +
+      '<td class="del" style="width:36px;padding-top:8px"><button class="btn ghost icon xs" data-act="itemDel:' + i + '" title="Xoá dòng" aria-label="Xoá dòng">' + I('trash') + '</button></td></tr>'
     ).join('');
   }
 
@@ -389,7 +397,8 @@
         '<button class="btn out" data-act="docPrint">' + I('printer') + 'In / PDF</button>' +
         (isNew ? '' : '<button class="btn ghost icon" data-act="docMore" title="Thao tác khác" aria-label="Thao tác khác">' + I('more') + '</button>')) +
 
-      '<div class="grid g-side2">' +
+      '<div class="ed-tabs"><div class="seg"><button class="on" data-act="edView:form">' + I('edit', 15) + ' Soạn phiếu</button><button data-act="edView:pv">' + I('eye', 15) + ' Xem trước tờ in</button></div></div>' +
+      '<div class="grid g-side2" data-view="form" id="ed-grid">' +
       '<div class="stack" id="doc-form">' +
 
       // ---- Thông tin phiếu
@@ -446,7 +455,7 @@
       '</div>' +
 
       // ---- Xem trước
-      '<div><div class="sticky-pv" style="position:sticky;top:80px"><div class="row" style="margin-bottom:8px"><b>Xem trước tờ phiếu</b><span class="spacer"></span><span class="muted" style="font-size:12.5px">A4 dọc · Times New Roman</span></div>' +
+      '<div class="pv-col"><div class="sticky-pv" style="position:sticky;top:80px"><div class="row" style="margin-bottom:8px"><b>Xem trước tờ phiếu</b><span class="spacer"></span><span class="muted" style="font-size:12.5px">A4 dọc · Times New Roman</span></div>' +
       '<div id="doc-preview">' + Docs.previewBox(d) + '</div></div></div>' +
       '</div>';
 
@@ -635,26 +644,50 @@
       };
     },
     async docSave() { await saveDraft(false); },
+    edView(v, btn) {
+      const g = document.getElementById('ed-grid'); if (!g) return;
+      g.setAttribute('data-view', v);
+      btn.parentNode.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === btn));
+      if (v === 'pv') { const pv = document.getElementById('doc-preview'); if (pv) { pv.innerHTML = Docs.previewBox(collect()); } setTimeout(fitPaper, 20); }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
     docPrint() { collect(); Docs.print(draft); },
     docMore() {
       const d = draft;
       const ov = App.openSheet(App.sheetHead('Thao tác', d.soPhieu) +
         '<div class="menu-item" data-act="docDuplicate"><div class="mic">' + I('copy') + '</div><div><div class="mt">Nhân bản phiếu</div><div class="ms">Tạo phiếu mới cùng nội dung, số phiếu mới</div></div></div>' +
         (d.type === 'TU' ? '<a class="menu-item" href="#/phieu/moi/HU?from=' + d.id + '" style="color:inherit;text-decoration:none"><div class="mic">' + I('wallet') + '</div><div><div class="mt">Lập phiếu hoàn ứng từ phiếu này</div><div class="ms">Điền sẵn số phiếu tạm ứng và số tiền đã ứng</div></div></a>' : '') +
-        '<div class="menu-item" data-act="docDelete"><div class="mic" style="background:hsl(var(--nguy-hiem)/.1);color:hsl(var(--nguy-hiem-dam))">' + I('trash') + '</div><div><div class="mt">Xoá phiếu</div><div class="ms">Không thể hoàn tác</div></div></div>', { center: true });
+        '<div class="menu-item" data-act="docDelete"><div class="mic" style="background:hsl(var(--nguy-hiem)/.1);color:hsl(var(--nguy-hiem-dam))">' + I('trash') + '</div><div><div class="mt">Chuyển vào thùng rác</div><div class="ms">Khôi phục được trong ' + App.TRASH_DAYS + ' ngày</div></div></div>', { center: true });
       ov.addEventListener('click', (e) => { if (e.target.closest('a.menu-item')) App.closeSheet(ov); });
     },
     docDuplicate() { App.closeAllSheets(); location.hash = '#/phieu/moi/' + draft.type + '?copy=' + draft.id; },
-    docDelete() {
+    async docDelete() {
       App.closeAllSheets();
-      App.confirmSheet('Xoá phiếu ' + draft.soPhieu + '?', 'Phiếu và tệp đính kèm sẽ bị xoá vĩnh viễn trên mọi thiết bị.', async () => {
-        const id = draft.id, type = draft.type;
-        for (const im of App.data.images.filter((x) => x.docId === id)) await DB.del('images', im.id);
-        await DB.del('docs', id);
-        draft = null; dirty = false;
-        App.toast('Đã xoá phiếu', 'ok');
-        App.nav(TYPES[type].route);
-      }, true, 'Xoá phiếu');
+      const id = draft.id, type = draft.type;
+      draft = null; dirty = false;
+      App.nav(TYPES[type].route);
+      await App.Trash.soft([{ store: 'docs', id }]);
+    },
+    async selDocsTrash() {
+      const ids = App.Sel.list(); if (!ids.length) return;
+      await App.Trash.soft(ids.map((id) => ({ store: 'docs', id })));
+    },
+    async selDocsExcel() {
+      const ids = new Set(App.Sel.list());
+      const docs = App.data.docs.filter((d) => ids.has(d.id)).reverse();
+      if (!docs.length) return;
+      App.toast('Đang tạo Excel ' + docs.length + ' phiếu…');
+      await App.Export.excel(docs, 'Phieu-da-chon-' + U.todayISO() + '.xlsx');
+    },
+    selDocsStatus() {
+      const ids = App.Sel.list();
+      const ov = App.openSheet(App.sheetHead('Đổi trạng thái ' + ids.length + ' phiếu') +
+        STATUS.map((s) => '<div class="menu-item" data-st="' + s.v + '"><span class="badge ' + s.cls + '">' + s.t + '</span></div>').join(''), { center: true });
+      ov.addEventListener('click', async (e) => {
+        const it = e.target.closest('[data-st]'); if (!it) return;
+        for (const id of ids) { const d = await DB.get('docs', id); if (d) { d.status = it.getAttribute('data-st'); await DB.put('docs', d); } }
+        App.closeSheet(ov); App.toast('Đã cập nhật ' + ids.length + ' phiếu', 'ok'); App.reload();
+      });
     },
     async docWord(id) {
       let d = docById(id); if (!d) return;
