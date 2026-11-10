@@ -581,7 +581,7 @@
         out.push({ ic: 'bell', lv: 'accent', t: d.soPhieu + ' chờ duyệt đã ' + Math.floor((Date.now() - Date.parse(d.submittedAt)) / 864e5) + ' ngày', s: 'Mở phiếu → “Nhắc kế toán” hoặc nhắn tin', link: '#/phieu/' + d.id }));
       const drafts = docs.filter((d) => Flow.status(d) === 'nhap').length;
       if (drafts) out.push({ ic: 'edit', lv: 'out', t: drafts + ' phiếu nháp chưa gửi duyệt', s: 'Gửi kế toán khi đã đủ chứng từ', link: '#/' });
-      if (day >= 25) out.push({ ic: 'calendar', lv: 'accent', t: 'Cuối ' + mLabel(today) + ': hoàn tất chứng từ', s: 'Gửi hoàn ứng, bổ sung hoá đơn trước khi chốt sổ', link: '#/doi-chieu' });
+      if (day >= 25) out.push({ ic: 'calendar', lv: 'accent', t: 'Cuối ' + mLabel(today) + ': hoàn tất chứng từ', s: 'Gửi hoàn ứng, bổ sung hoá đơn trước khi chốt sổ', link: '#/bao-cao' });
     }
     return out;
   };

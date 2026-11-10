@@ -1080,3 +1080,8 @@ tr.row-off td{opacity:.55}
 .tus-n{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:hsl(var(--chu-nhat))}
 .tus-n b{color:hsl(var(--chu-dam))}
 @media(max-width:720px){.tus-row{grid-template-columns:1fr}}
+
+.myrep-total{display:flex;flex-direction:column;align-items:center;gap:2px;padding:26px 16px}
+.myrep-total span{font-size:13px;font-weight:600;color:hsl(var(--chu-nhat))}
+.myrep-total b{font-size:32px;font-family:var(--font-heading);color:hsl(var(--chu-dam))}
+.myrep-total small{font-size:12.5px;color:hsl(var(--chu-nhat))}
