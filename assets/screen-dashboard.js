@@ -81,12 +81,12 @@
       stat('g-or', 'image', 'Thiếu ảnh', noProof, exps.length ? Math.round(noProof / exps.length * 100) : 0) +
       stat('g-rd', 'calendar', 'Sự kiện', App.data.events.length, Math.min(100, App.data.events.length * 10)) +
       '</div></div></div>' +
-      '<div class="card"><div class="card-h"><div><h3>Tổng quan theo tháng</h3><div class="muted" style="font-size:13px;margin-top:2px">' + I('right', 12).replace('class="ico"', 'class="ico" style="display:inline;transform:rotate(-90deg);color:#82d616;vertical-align:-1px"') + ' <b>' + pctTxt(exM, exP) + '</b> thực chi tháng này</div></div></div>' +
+      '<div class="card"><div class="card-h"><div><h3>Tổng quan theo tháng</h3><div class="muted" style="font-size:13px;margin-top:2px">' + I('right', 12).replace('class="ico"', 'class="ico" style="display:inline;transform:rotate(-90deg);color:hsl(var(--thanh-cong));vertical-align:-1px"') + ' <b>' + pctTxt(exM, exP) + '</b> thực chi tháng này</div></div></div>' +
       '<div class="card-b"><div class="chart-wrap"><canvas id="ch-line" aria-label="Tạm ứng và thực chi theo tháng"></canvas></div></div></div>' +
       '</div>' +
 
       '<div class="grid g-84 mt24">' +
-      '<div class="card"><div class="card-h"><div><h3>Phiếu gần đây</h3><div class="muted" style="font-size:13px;margin-top:2px">' + I('check', 13).replace('class="ico"', 'class="ico" style="display:inline;color:#17c1e8;vertical-align:-2px"') + ' <b>' + docs.filter((d) => d.status === 'da-chi').length + ' đã chi</b> / ' + docs.length + ' phiếu</div></div>' +
+      '<div class="card"><div class="card-h"><div><h3>Phiếu gần đây</h3><div class="muted" style="font-size:13px;margin-top:2px">' + I('check', 13).replace('class="ico"', 'class="ico" style="display:inline;color:hsl(var(--chinh));vertical-align:-2px"') + ' <b>' + docs.filter((d) => d.status === 'da-chi').length + ' đã chi</b> / ' + docs.length + ' phiếu</div></div>' +
       '<a class="btn sm out" href="#/thanh-toan">Xem tất cả</a></div><div class="card-b flush">' +
       (rows ? '<div class="tbl-wrap"><table class="tbl cards"><thead><tr><th>Phiếu</th><th class="hide-m">Người tham gia</th><th class="num">Số tiền</th><th>Tiến độ</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
         : App.emptyState('file', 'Chưa có phiếu nào', 'Lập phiếu đầu tiên theo mẫu công ty.', '<a class="btn" href="#/phieu/moi/TU">' + I('plus') + 'Lập phiếu tạm ứng</a>')) + '</div></div>' +
@@ -106,9 +106,9 @@
     const D = App.Docs, docs = App.data.docs, exps = App.data.expenses;
     App.ensureLib('chart').then((Chart) => {
       if (!document.getElementById('ch-bars')) return;
-      const g1 = css('--g1') || '#7928ca', g2 = css('--g2') || '#ff0080';
+      const g1 = css('--g1') || '#6B3DBE', g2 = css('--g2') || '#C2357A';
       const dark = App.isDark();
-      Chart.defaults.font.family = '"Open Sans", Inter, system-ui, sans-serif';
+      Chart.defaults.font.family = '"Source Sans 3", system-ui, sans-serif';
       Chart.defaults.font.size = 11;
       Chart.defaults.maintainAspectRatio = false;
       const axis = dark ? '#8b93a7' : '#b2b9bf';

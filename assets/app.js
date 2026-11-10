@@ -372,8 +372,8 @@
   applyUI();
   App.uiPrefs = uiPrefs;
 
-  const ACCENTS = [['tim', '#7928ca', '#ff0080', 'Tím LtL'], ['hong', '#d6336c', '#ff8a65', 'Hồng cam'], ['xanh', '#2152ff', '#21d4fd', 'Xanh dương'],
-    ['luc', '#17ad37', '#98ec2d', 'Xanh lá'], ['cam', '#f53939', '#fbcf33', 'Cam'], ['toi', '#141727', '#3a416f', 'Xanh đen']];
+  const ACCENTS = [['tim', '#6B3DBE', '#C2357A', 'Tím LtL'], ['hong', '#BE185D', '#E2556F', 'Hồng'], ['xanh', '#2952CC', '#0E7490', 'Xanh dương'],
+    ['luc', '#047857', '#0F766E', 'Xanh lá'], ['cam', '#C2410C', '#B91C1C', 'Cam'], ['toi', '#334155', '#1E293B', 'Xanh đen']];
   const GROUPS = [
     { label: 'Quản lý', items: ['', 'tam-ung', 'chi-tieu', 'hoan-ung', 'thanh-toan', 'su-kien', 'bao-cao'] },
     { label: 'Tài khoản', items: ['ca-nhan', 'tai-khoan', 'thung-rac', 'cai-dat', 'huong-dan'] },

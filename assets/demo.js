@@ -19,7 +19,7 @@
     const c = document.createElement('canvas'); c.width = 900; c.height = 1200;
     const x = c.getContext('2d');
     x.fillStyle = '#fbfbfd'; x.fillRect(0, 0, 900, 1200);
-    const g = x.createLinearGradient(0, 0, 900, 0); g.addColorStop(0, color); g.addColorStop(1, '#ff0080');
+    const g = x.createLinearGradient(0, 0, 900, 0); g.addColorStop(0, color); g.addColorStop(1, '#C2357A');
     x.fillStyle = g; x.fillRect(0, 0, 900, 160);
     x.fillStyle = '#fff'; x.font = 'bold 56px Arial'; x.fillText('HOÁ ĐƠN', 50, 105);
     x.fillStyle = '#344767'; x.font = '34px Arial';
@@ -53,7 +53,7 @@
       [ev3, 'Thuê xe 16 chỗ', iso(-3, 5), 2400000, 'vat', 'Di chuyển', 'A, B, C'],
       [ev3, 'Nước uống, bánh cho học sinh', iso(-3, 5), 650000, 'bill', 'Ăn uống', 'A'],
     ];
-    const colors = ['#7928ca', '#2152ff', '#17ad37', '#f53939'];
+    const colors = ['#6B3DBE', '#2952CC', '#047857', '#C2410C'];
     let k = 0;
     for (const [ev, content, date, amount, vatType, category, participants] of ex) {
       const e = { id: id(), eventId: ev.id, content, date, amount, vatType, category, participants, ghiChu: vatType === 'vat' ? 'HĐ số 00' + (120 + k) : '', createdAt: U.nowISO() };
