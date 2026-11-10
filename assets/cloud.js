@@ -104,9 +104,9 @@
     return data;
   }
   async function signOut() {
-    if (Cloud.demo) { try { localStorage.removeItem('ltl_demo'); } catch (e) {} Cloud.demo = false; }
-    try { if (Cloud.ready()) await sync(); } catch (e) {}
-    if (Cloud.client) { try { await Cloud.client.auth.signOut(); } catch (e) {} }
+    const wasDemo = Cloud.demo;
+    if (wasDemo) { try { localStorage.removeItem('ltl_demo'); } catch (e) {} Cloud.demo = false; }
+    else if (Cloud.client) { try { await Cloud.client.auth.signOut(); } catch (e) {} }
     Cloud.user = null; Cloud.isAdmin = false;
     await clearLocalData();
     try { localStorage.removeItem(OWNER_KEY); } catch (e) {}
@@ -162,12 +162,20 @@
   async function dataURLToBlob(u) { const r = await fetch(u); return r.blob(); }
 
   /* ----------------------------- Đồng bộ ----------------------------- */
+  // Thiết kế:
+  //  • Xoá = ghi "bia mộ" lên server (dòng giữ nguyên id, data = {_deleted:true}) để
+  //    mọi thiết bị khác cũng xoá theo, không bao giờ đẩy bản ghi đã xoá lên lại.
+  //  • Đọc metadata theo trang 1000 dòng (giới hạn mặc định của Supabase).
+  //  • Ghi dữ liệu kéo về bằng hàm put gốc (không đóng dấu, không đẩy), và bỏ qua
+  //    bản ghi người dùng vừa sửa trong lúc đang đồng bộ.
+  //  • Đẩy lên theo lô giới hạn dung lượng; ảnh quá lớn chỉ đẩy thông tin.
   const tsOf = (rec) => rec.updatedAt || rec.createdAt || '1970-01-01T00:00:00.000Z';
+  const MAX_BLOB = 6 * 1024 * 1024, BATCH_BYTES = 3 * 1024 * 1024;
   async function gatherLocal() {
     const rows = [];
     for (const store in SYNCED) {
       let recs; try { recs = await DB.all(store); } catch (e) { recs = []; }
-      (recs || []).forEach((rec) => { if (rec && rec.id) rows.push({ id: String(rec.id), kind: SYNCED[store], updated_at: tsOf(rec), rec }); });
+      (recs || []).forEach((rec) => { if (rec && rec.id) rows.push({ id: String(rec.id), store, kind: SYNCED[store], updated_at: tsOf(rec), rec }); });
     }
     return rows;
   }
@@ -182,118 +190,166 @@
         createdAt: r.createdAt || null, updatedAt: item.updated_at,
       };
       if (r.blob) {
-        if (r.blob.size > 6 * 1024 * 1024) data._skipped = true;
+        if (r.blob.size > MAX_BLOB) data._skipped = true;
         else { try { data.b64 = await blobToDataURL(r.blob); } catch (e) { data._skipped = true; } }
-      }
+      } else data._skipped = true;
     } else {
       data = Object.assign({}, item.rec, { updatedAt: item.updated_at });
       if (item.kind === 'doc' && App.Docs) data.total = App.Docs.total(item.rec);
     }
     return { owner: Cloud.user.id, id: item.id, kind: item.kind, updated_at: item.updated_at, data };
   }
-  async function applyRemoteToLocal(row) {
-    const store = KIND_STORE[row.kind]; if (!store) return;
-    const data = row.data || {};
-    const rec = Object.assign({}, data, { id: row.id, updatedAt: row.updated_at });
-    if (row.kind === 'image') {
-      if (data._skipped || !data.b64) return;
-      try { rec.blob = await dataURLToBlob(data.b64); } catch (e) { return; }
-      delete rec.b64; delete rec._skipped;
-    }
-    await DB.put(store, rec);
+  // làm sạch mã định danh trong dữ liệu kéo về (chặn chèn mã qua id)
+  const ID_FIELDS = ['eventId', 'expenseId', 'docId', 'tuDocId', 'legacyId'];
+  function cleanIds(rec) {
+    ID_FIELDS.forEach((k) => { if (rec[k] != null && !U.isId(String(rec[k]))) rec[k] = null; });
+    if (Array.isArray(rec.items)) rec.items.forEach((it) => { if (it && it.id && !U.isId(String(it.id))) it.id = U.uid(); if (it && it.expenseId && !U.isId(String(it.expenseId))) it.expenseId = null; });
+    return rec;
   }
-  function tombs() { try { return JSON.parse(localStorage.getItem(TOMB_KEY) || '[]'); } catch (e) { return []; } }
+  Cloud.cleanIds = cleanIds;
+  async function applyRemoteToLocal(row, gathered) {
+    const store = KIND_STORE[row.kind]; if (!store || !U.isId(String(row.id))) return false;
+    // người dùng vừa sửa bản ghi này trong lúc đồng bộ → giữ bản trên máy, lần sau đẩy lên
+    const cur = await DB.get(store, row.id);
+    const g = gathered.get(String(row.id));
+    if (cur && (!g || tsOf(cur) !== g.updated_at)) return false;
+    const data = row.data || {};
+    const rec = cleanIds(Object.assign({}, data, { id: row.id, updatedAt: row.updated_at }));
+    if (row.kind === 'image') {
+      delete rec.b64; delete rec._skipped;
+      if (data.b64 && !data._skipped) { try { rec.blob = await dataURLToBlob(data.b64); } catch (e) { rec._noBlob = true; } }
+      else rec._noBlob = true;   // ảnh quá lớn chỉ có trên máy gốc — vẫn lưu thông tin để khỏi kéo lại mãi
+    }
+    await _put(store, rec);
+    return true;
+  }
+  // bia mộ chờ đẩy lên: [{id, kind}]
+  function tombs() {
+    try { return (JSON.parse(localStorage.getItem(TOMB_KEY) || '[]') || []).map((t) => (typeof t === 'string' ? { id: t, kind: 'doc' } : t)).filter((t) => t && t.id); }
+    catch (e) { return []; }
+  }
   function saveTombs(t) { try { localStorage.setItem(TOMB_KEY, JSON.stringify(t)); } catch (e) {} }
+  function addTomb(id, kind) { const t = tombs(); if (!t.some((x) => x.id === id)) { t.push({ id, kind, at: U.nowISO() }); saveTombs(t); } }
+  Cloud.pendingDeletes = () => tombs().length;
+
+  async function pagedMeta(owner) {
+    const out = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await Cloud.client.from(TABLE).select('id,kind,updated_at,del:data->>_deleted').eq('owner', owner).order('id').range(from, from + 999);
+      if (error) throw error;
+      out.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    return out;
+  }
+  async function upsertBatches(rows) {
+    let batch = [], bytes = 0;
+    const flush = async () => {
+      if (!batch.length) return;
+      const { error } = await Cloud.client.from(TABLE).upsert(batch, { onConflict: 'owner,id' });
+      if (error) throw error;
+      batch = []; bytes = 0;
+    };
+    for (const r of rows) {
+      const sz = JSON.stringify(r.data).length;
+      if (batch.length && (bytes + sz > BATCH_BYTES || batch.length >= 30)) await flush();
+      batch.push(r); bytes += sz;
+    }
+    await flush();
+  }
 
   async function sync(opts) {
     opts = opts || {};
-    if (Cloud.demo) { if (opts.loud) App.toast('Chế độ demo trên máy — không đồng bộ', 'err'); return; }
+    if (Cloud.demo) { if (opts.loud) App.toast('Đang dùng thử — không đồng bộ', 'err'); return false; }
     await ensureClient();
-    if (!Cloud.user) { if (opts.loud) App.toast('Chưa đăng nhập', 'err'); return; }
-    if (!navigator.onLine) { setState('offline'); if (opts.loud) App.toast('Đang offline — sẽ đồng bộ khi có mạng', 'err'); return; }
-    if (Cloud.state === 'syncing') return;
+    if (!Cloud.user) { if (opts.loud) App.toast('Chưa đăng nhập', 'err'); return false; }
+    if (!navigator.onLine) { setState('offline'); if (opts.loud) App.toast('Đang offline — sẽ đồng bộ khi có mạng', 'err'); return false; }
+    if (Cloud.state === 'syncing') { Cloud._again = true; return false; }
     setState('syncing');
-    const owner = Cloud.user.id;
+    const owner = Cloud.user.id, startedAt = Date.now();
+    let pushed = 0, pulled = 0, removed = 0;
     try {
-      // 0) xoá trên đám mây những bản ghi đã xoá lúc offline
+      // 0) đẩy các lần xoá (bia mộ) lên server
       const t = tombs();
       if (t.length) {
-        for (let i = 0; i < t.length; i += 50) {
-          const ids = t.slice(i, i + 50);
-          const { error } = await Cloud.client.from(TABLE).delete().eq('owner', owner).in('id', ids);
-          if (error) throw error;
-        }
-        saveTombs([]);
+        const now = U.nowISO();
+        await upsertBatches(t.map((x) => ({ owner, id: x.id, kind: x.kind || 'doc', updated_at: x.at || now, data: { _deleted: true } })));
+        const done = new Set(t.map((x) => x.id));
+        saveTombs(tombs().filter((x) => !done.has(x.id)));   // giữ bia mộ phát sinh trong lúc đẩy
       }
-      const tombSet = new Set(t);
       const localRows = await gatherLocal();
-      // 1) chỉ kéo metadata của CHÍNH tài khoản này (admin đọc được mọi dòng nên bắt buộc lọc owner)
-      const { data: remoteMeta, error } = await Cloud.client.from(TABLE).select('id,kind,updated_at').eq('owner', owner);
-      if (error) throw error;
-      const remoteMap = new Map((remoteMeta || []).map((r) => [String(r.id), r]));
+      const remoteMeta = await pagedMeta(owner);
+      const remoteMap = new Map(remoteMeta.map((r) => [String(r.id), r]));
       const localMap = new Map(localRows.map((r) => [r.id, r]));
       const ids = new Set([...remoteMap.keys(), ...localMap.keys()]);
-      const toRemote = [], toLocalIds = [];
+      const toRemote = [], toLocalIds = [], toDelete = [];
       ids.forEach((id) => {
-        if (tombSet.has(id)) return;
         const L = localMap.get(id), R = remoteMap.get(id);
-        if (L && R) { const lt = Date.parse(L.updated_at) || 0, rt = Date.parse(R.updated_at) || 0; if (lt > rt) toRemote.push(L); else if (rt > lt) toLocalIds.push(id); }
+        const lt = L ? Date.parse(L.updated_at) || 0 : 0, rt = R ? Date.parse(R.updated_at) || 0 : 0;
+        if (R && R.del) { if (L) { if (lt > rt) toRemote.push(L); else toDelete.push(L); } return; }
+        if (L && R) { if (lt > rt) toRemote.push(L); else if (rt > lt) toLocalIds.push(id); }
         else if (L) toRemote.push(L); else if (R) toLocalIds.push(id);
       });
       if (toRemote.length) {
         const rows = [];
         for (const it of toRemote) rows.push(await serializeForRemote(it));
-        for (let i = 0; i < rows.length; i += 30) {
-          const { error: e2 } = await Cloud.client.from(TABLE).upsert(rows.slice(i, i + 30), { onConflict: 'owner,id' });
-          if (e2) throw e2;
-        }
+        await upsertBatches(rows);
+        pushed = rows.length;
       }
-      if (toLocalIds.length) {
-        Cloud._applying = true;
-        try {
-          for (let i = 0; i < toLocalIds.length; i += 12) {
-            const { data: rows, error: e3 } = await Cloud.client.from(TABLE).select('id,kind,updated_at,data').eq('owner', owner).in('id', toLocalIds.slice(i, i + 12));
-            if (e3) throw e3;
-            for (const R of (rows || [])) await applyRemoteToLocal(R);
-          }
-        } finally { Cloud._applying = false; }
+      for (const L of toDelete) { await _del(L.store, L.id); removed++; }
+      for (let i = 0; i < toLocalIds.length; i += 12) {
+        const { data: rows, error: e3 } = await Cloud.client.from(TABLE).select('id,kind,updated_at,data').eq('owner', owner).in('id', toLocalIds.slice(i, i + 12));
+        if (e3) throw e3;
+        for (const R of (rows || [])) if (await applyRemoteToLocal(R, localMap)) pulled++;
       }
       Cloud.lastSync = U.nowISO();
+      Cloud._syncedAt = startedAt;
       localStorage.setItem('ltl_lastsync', Cloud.lastSync);
       setState('ok');
-      if (opts.loud) App.toast('Đã đồng bộ (' + toRemote.length + ' lên · ' + toLocalIds.length + ' về)', 'ok');
-      if (toLocalIds.length && App.user && !(App.route && App.route.name === 'phieu')) App.reload();
+      if (opts.loud) App.toast('Đã đồng bộ (' + pushed + ' lên · ' + pulled + ' về' + (removed ? ' · ' + removed + ' xoá' : '') + ')', 'ok');
+      if ((pulled || removed) && App.user && !(App.route && App.route.name === 'phieu') && !document.querySelector('#modal-root .overlay')) App.reload();
+      return true;
     } catch (e) {
       setState('error');
       if (opts.loud || !opts.quiet) App.toast('Lỗi đồng bộ: ' + (e.message || e), 'err');
-      throw e;
+      if (opts.throw) throw e;
+      return false;
+    } finally {
+      if (Cloud._again) { Cloud._again = false; setTimeout(() => Cloud.maybeSync(), 1500); }
     }
   }
   Cloud.sync = sync;
+  // Đồng bộ hết trước khi đăng xuất: true nếu không còn gì chưa đẩy lên
+  Cloud.flush = async function () {
+    if (Cloud.demo) return true;
+    for (let i = 0; i < 30 && Cloud.state === 'syncing'; i++) await new Promise((r) => setTimeout(r, 500));
+    if (!Cloud.ready()) return false;
+    clearTimeout(Cloud._pushTimer);
+    const ok = await sync({ quiet: true });
+    if (!ok) return false;
+    if (tombs().length) return false;
+    // có sửa gì sau khi lần đồng bộ vừa rồi bắt đầu không?
+    return !(Cloud._dirtyAt && Cloud._dirtyAt >= (Cloud._syncedAt || 0));
+  };
 
   function schedulePush() {
     if (!Cloud.ready()) return;
     clearTimeout(Cloud._pushTimer);
-    Cloud._pushTimer = setTimeout(() => { sync({ quiet: true }).catch(() => {}); }, 2500);
+    Cloud._pushTimer = setTimeout(() => { sync({ quiet: true }); }, 2500);
   }
-  Cloud.maybeSync = () => { if (Cloud.ready()) sync({ quiet: true }).catch(() => {}); };
+  Cloud.maybeSync = () => { if (Cloud.ready()) sync({ quiet: true }); };
 
   /* ----------------------------- Bọc DB.put / DB.del ----------------------------- */
   const _put = DB.put.bind(DB);
   DB.put = function (store, value) {
-    if (!Cloud._applying && SYNCED[store] && value && typeof value === 'object') value.updatedAt = U.nowISO();
-    return _put(store, value).then((v) => { if (!Cloud._applying && SYNCED[store]) schedulePush(); return v; });
+    if (SYNCED[store] && value && typeof value === 'object') { value.updatedAt = U.nowISO(); Cloud._dirtyAt = Date.now(); }
+    return _put(store, value).then((v) => { if (SYNCED[store]) schedulePush(); return v; });
   };
   const _del = DB.del.bind(DB);
   DB.del = function (store, id) {
     return _del(store, id).then((v) => {
-      if (!Cloud._applying && SYNCED[store] && Cloud.user) {
-        const sid = String(id);
-        const remember = () => { const t = tombs(); if (!t.includes(sid)) { t.push(sid); saveTombs(t); } };
-        if (Cloud.ready()) {
-          Cloud.client.from(TABLE).delete().eq('owner', Cloud.user.id).eq('id', sid).then(({ error }) => { if (error) remember(); }, remember);
-        } else remember();
-      }
+      // luôn ghi bia mộ (kể cả khi offline / phiên hết hạn); lần đồng bộ sau sẽ đẩy lên
+      if (SYNCED[store] && !Cloud.demo) { addTomb(String(id), SYNCED[store]); Cloud._dirtyAt = Date.now(); schedulePush(); }
       return v;
     });
   };
@@ -409,40 +465,50 @@
   Cloud.openNewPassword = openNewPassword;
 
   /* ----------------------------- API cho trang quản trị ----------------------------- */
+  // đọc theo trang 1000 dòng; bỏ dòng đã xoá và dòng có mã không hợp lệ
+  async function paged(build) {
+    const out = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await build().range(from, from + 999);
+      if (error) throw error;
+      out.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    return out;
+  }
+  const okRow = (r) => r && U.isId(String(r.id || 'x')) && !(r.del || (r.data && r.data._deleted));
+  const cleanRow = (r) => { if (r.data) r.data = cleanIds(Object.assign({}, r.data)); return r; };
   Cloud.admin = {
     async profiles() {
-      const { data, error } = await Cloud.client.from('ltl_profiles').select('id,email,full_name,dept,position,created_at,last_seen').order('last_seen', { ascending: false });
-      if (error) throw error;
-      return data || [];
+      return paged(() => Cloud.client.from('ltl_profiles').select('id,email,full_name,dept,position,created_at,last_seen').order('last_seen', { ascending: false }));
     },
     // tóm tắt mọi bản ghi (không kéo ảnh) để đếm phiếu / tiền theo tài khoản
     async summary() {
-      const { data, error } = await Cloud.client.from(TABLE).select('owner,kind,updated_at,type:data->>type,total:data->>total,amount:data->>amount').neq('kind', 'image').neq('kind', 'settings');
-      if (error) throw error;
-      return data || [];
+      const rows = await paged(() => Cloud.client.from(TABLE).select('owner,id,kind,updated_at,del:data->>_deleted,trashed:data->>deletedAt,type:data->>type,total:data->>total,amount:data->>amount').neq('kind', 'image').neq('kind', 'settings').order('id'));
+      return rows.filter((r) => okRow(r) && !r.trashed);
     },
-    // toàn bộ dữ liệu (trừ ảnh) của mọi tài khoản — đọc theo trang 1000 dòng
+    // toàn bộ dữ liệu (trừ ảnh) của mọi tài khoản
     async allData() {
-      const out = [];
-      for (let from = 0; ; from += 1000) {
-        const { data, error } = await Cloud.client.from(TABLE).select('owner,id,kind,updated_at,data').in('kind', ['doc', 'event', 'expense', 'settings']).range(from, from + 999);
-        if (error) throw error;
-        out.push(...(data || []));
-        if (!data || data.length < 1000) break;
-      }
-      return out;
+      const rows = await paged(() => Cloud.client.from(TABLE).select('owner,id,kind,updated_at,data').in('kind', ['doc', 'event', 'expense', 'settings']).order('id'));
+      return rows.filter((r) => okRow(r) && !(r.data && r.data.deletedAt)).map(cleanRow);
     },
     async ownerData(ownerId) {
-      const { data, error } = await Cloud.client.from(TABLE).select('id,kind,updated_at,data').eq('owner', ownerId).in('kind', ['doc', 'event', 'expense', 'settings']);
-      if (error) throw error;
-      return data || [];
+      const rows = await paged(() => Cloud.client.from(TABLE).select('id,kind,updated_at,data').eq('owner', ownerId).in('kind', ['doc', 'event', 'expense', 'settings']).order('id'));
+      return rows.filter((r) => okRow(r) && !(r.data && r.data.deletedAt)).map(cleanRow);
     },
   };
+
 
   /* ----------------------------- Actions ----------------------------- */
   Object.assign(App.actions, {
     authTab(t) { authTab = t; App.render(); },
     async tryDemo() {
+      // máy đang giữ dữ liệu của một tài khoản thật (chưa đăng xuất) → không cho dùng thử kẻo xoá mất
+      let owner = ''; try { owner = localStorage.getItem(OWNER_KEY) || ''; } catch (e) {}
+      if (owner && owner !== 'local-demo') {
+        const n = (await DB.all('docs')).length + (await DB.all('expenses')).length + (await DB.all('events')).length;
+        if (n) { App.toast('Máy này còn dữ liệu của tài khoản đang dùng. Hãy đăng nhập lại và đăng xuất trước khi dùng thử.', 'err'); return; }
+      }
       try { localStorage.setItem('ltl_demo', '1'); } catch (e) {}
       await Cloud.init();
       await App.afterLogin();
@@ -464,11 +530,15 @@
         App.confirmSheet('Thoát dùng thử?', 'Toàn bộ dữ liệu bạn nhập thử trên máy này sẽ bị xoá.', async () => { await signOut(); App.afterLogout(); }, true, 'Thoát dùng thử');
         return;
       }
-      App.confirmSheet('Đăng xuất?', 'Dữ liệu đã được đồng bộ lên đám mây và sẽ được xoá khỏi máy này để bảo mật. Đăng nhập lại sẽ tự tải về.', async () => {
-        App.toast('Đang đăng xuất…');
-        await signOut();
-        App.afterLogout();
-      }, false, 'Đăng xuất');
+      const doOut = async () => { App.toast('Đang đăng xuất…'); await signOut(); App.afterLogout(); };
+      App.toast('Đang đồng bộ trước khi đăng xuất…');
+      Cloud.flush().catch(() => false).then((ok) => {
+        if (ok) {
+          App.confirmSheet('Đăng xuất?', 'Dữ liệu đã đồng bộ lên đám mây và sẽ được xoá khỏi máy này để bảo mật. Đăng nhập lại sẽ tự tải về.', doOut, false, 'Đăng xuất');
+        } else {
+          App.confirmSheet('Chưa đồng bộ được — vẫn đăng xuất?', (navigator.onLine ? 'Đồng bộ đang lỗi.' : 'Máy đang mất mạng.') + ' Nếu đăng xuất bây giờ, các thay đổi chưa đồng bộ trên máy này sẽ bị MẤT. Nên kết nối mạng, bấm chấm tròn đồng bộ trên thanh trên, rồi đăng xuất sau.', doOut, true, 'Vẫn đăng xuất');
+        }
+      });
     },
     changePassword() { openNewPassword(); },
   });

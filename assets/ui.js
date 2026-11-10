@@ -127,6 +127,32 @@
     });
   };
 
+  // Nén ảnh chụp (thường 3–8MB) xuống ~0,3–0,8MB: cạnh dài tối đa 2000px, JPEG 0,85
+  App.compressImage = async function (blob) {
+    const t = (blob && blob.type) || '';
+    if (!/^image\/(jpeg|png|webp|heic|heif)$/i.test(t) && t !== '') return blob;
+    if (blob.size < 700 * 1024) return blob;
+    try {
+      let bmp;
+      try { bmp = await createImageBitmap(blob); }
+      catch (e) { bmp = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(blob); }); }
+      const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+      const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+      cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+      if (bmp.close) bmp.close();
+      const out = await new Promise((res) => cv.toBlob(res, 'image/jpeg', 0.85));
+      if (!out || out.size >= blob.size) return blob;
+      try { return new File([out], (blob.name || 'anh').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }); } catch (e) { return out; }
+    } catch (e) { return blob; }
+  };
+  App.prepFiles = async function (list) {
+    const out = [];
+    for (const b of list) out.push(await App.compressImage(b));
+    const big = out.filter((b) => b.size > 6 * 1024 * 1024);
+    if (big.length) App.toast(big.length + ' tệp lớn hơn 6MB chỉ lưu trên máy này, không đồng bộ được', 'err');
+    return out;
+  };
+
   // Tạo bản ghi ảnh từ File/Blob
   App.makeImage = function (blob, expenseId, eventId, extra) {
     const t = blob.type || '';
@@ -293,7 +319,7 @@
       if (!doc) { App.toast('Hãy lưu phiếu trước khi đính kèm tệp', 'err'); return; }
       const files = await App.pickFiles('image/*,application/pdf,.doc,.docx,.xls,.xlsx', true);
       if (!files.length) return;
-      for (const f of files) {
+      for (const f of await App.prepFiles(files)) {
         const rec = App.makeImage(f, null, doc.eventId || null, { docId, name: f.name });
         delete rec.isNewBlob;
         await DB.put('images', rec);

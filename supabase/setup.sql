@@ -22,6 +22,14 @@ create policy "own rows" on public.ltl_records
   for all using (owner = auth.uid()) with check (owner = auth.uid());
 create index if not exists ltl_records_owner_kind on public.ltl_records (owner, kind);
 
+-- Chặn mã định danh lạ (chống chèn mã HTML qua id) và bản ghi quá lớn (> 10 MB)
+alter table public.ltl_records drop constraint if exists ltl_records_id_ok;
+alter table public.ltl_records add constraint ltl_records_id_ok
+  check (id ~ '^[A-Za-z0-9_-]{1,64}$') not valid;
+alter table public.ltl_records drop constraint if exists ltl_records_size_ok;
+alter table public.ltl_records add constraint ltl_records_size_ok
+  check (pg_column_size(data) < 10485760) not valid;
+
 -- 2) Danh sách quản trị (không có policy → API không đọc trực tiếp được)
 create table if not exists public.ltl_admins (
   email text primary key,
@@ -34,9 +42,13 @@ returns boolean
 language sql stable security definer
 set search_path = public
 as $$
+  -- chỉ là admin khi email nằm trong danh sách VÀ đã được xác nhận
+  -- (tránh người khác đăng ký trước bằng email admin mà không cần xác nhận)
   select exists (
-    select 1 from public.ltl_admins a
-    where lower(a.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    select 1
+    from auth.users u
+    join public.ltl_admins a on lower(a.email) = lower(u.email)
+    where u.id = auth.uid() and u.email_confirmed_at is not null
   );
 $$;
 revoke all on function public.ltl_is_admin() from public;
@@ -60,7 +72,8 @@ create table if not exists public.ltl_profiles (
 alter table public.ltl_profiles enable row level security;
 drop policy if exists "profile self" on public.ltl_profiles;
 create policy "profile self" on public.ltl_profiles
-  for all using (id = auth.uid()) with check (id = auth.uid());
+  for all using (id = auth.uid())
+  with check (id = auth.uid() and lower(coalesce(email, '')) = lower(coalesce(auth.jwt() ->> 'email', '')));
 drop policy if exists "profile admin read" on public.ltl_profiles;
 create policy "profile admin read" on public.ltl_profiles
   for select using (public.ltl_is_admin());

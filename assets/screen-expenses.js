@@ -173,7 +173,8 @@
     let s = '<div class="imgrid">';
     (d.images || []).forEach((im) => {
       const url = App.imgURL(im);
-      const inner = im.kind === 'video' ? '<video src="' + url + '" muted playsinline></video><span class="vbadge">video</span>' : '<img src="' + url + '" alt="">';
+      const inner = !im.blob ? '<div style="display:grid;place-items:center;height:100%;font-size:11px;text-align:center;padding:6px;color:hsl(var(--chu-nhat))">Ảnh lớn, chỉ có trên máy đã chụp</div>'
+        : im.kind === 'video' ? '<video src="' + url + '" muted playsinline></video><span class="vbadge">video</span>' : '<img src="' + url + '" alt="">';
       s += '<div class="it" data-act="viewImg:' + im.id + '">' + inner +
         (im.amount ? '<span class="vbadge" style="left:auto;right:6px">' + U.groupThousand(im.amount) + '</span>' : '') +
         '<button class="ed" data-act="editImg:' + im.id + '" aria-label="Ghi chú ảnh" title="Ghi chú">' + I('edit', 13) + '</button>' +
@@ -193,7 +194,7 @@
       const s = App.settings;
       d = { id: U.uid(), eventId: evId, date: U.todayISO(), content: '', transferNote: '', ghiChu: '', participants: s.tenNgan || App.lastName(s.hoTen), category: 'Khác', vatType: 'none', amount: 0, createdAt: U.nowISO(), images: [], removed: [], isNew: true };
     }
-    (initialBlobs || []).forEach((b) => d.images.push(App.makeImage(b, d.id, d.eventId)));
+    if (initialBlobs && initialBlobs.length) setTimeout(() => addImages(initialBlobs), 0);
     App.draftExpense = d;
     App.openSheet(App.sheetHead(expense ? 'Sửa khoản chi' : 'Thêm khoản chi', (App.eventById(d.eventId) || {}).name) +
       '<div class="fgrid c2">' +
@@ -213,9 +214,11 @@
   App.openExpenseEditor = openExpenseEditor;
 
   function refreshGrid() { const g = document.getElementById('exp-images'); if (g && App.draftExpense) g.innerHTML = imagesGrid(App.draftExpense); }
-  function addImages(list) {
+  async function addImages(list) {
     const d = App.draftExpense; if (!d) return;
-    (Array.isArray(list) ? list : [list]).forEach((b) => d.images.push(App.makeImage(b, d.id, d.eventId)));
+    const files = await App.prepFiles(Array.isArray(list) ? list : [list]);
+    if (App.draftExpense !== d) return;
+    files.forEach((b) => d.images.push(App.makeImage(b, d.id, d.eventId)));
     refreshGrid();
   }
 

@@ -234,7 +234,7 @@
       root.innerHTML = App.pageHead('Giấy đề nghị ' + T.label.toLowerCase(),
         'Mẫu ' + esc(App.settings.mauSo) + ' · số phiếu tự nhảy ' + T.prefix + '-YYYYMM-STT',
         (rows.length ? '<button class="btn out" data-act="exportListExcel:' + type + '">' + I('excel') + 'Xuất Excel (' + rows.length + ' phiếu)</button>' : '') +
-        '<a class="btn accent" href="#/phieu/moi/' + type + (f.ev && f.ev !== '-' ? '?event=' + f.ev : '') + '">' + I('plus') + 'Tạo phiếu ' + T.label.toLowerCase() + '</a>') +
+        '<a class="btn accent" href="#/phieu/moi/' + type + (f.ev && f.ev !== '-' ? '?event=' + esc(encodeURIComponent(f.ev)) : '') + '">' + I('plus') + 'Tạo phiếu ' + T.label.toLowerCase() + '</a>') +
         '<div class="kpis k4">' +
         kpi('file', 'Số phiếu', all.length, rows.length !== all.length ? rows.length + ' phiếu đang lọc' : 'tất cả') +
         kpi('wallet', 'Tổng tiền', money(all.reduce((s, d) => s + Docs.total(d), 0)), 'Đang lọc: ' + money(sum)) +

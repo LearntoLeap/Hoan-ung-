@@ -187,6 +187,10 @@
       .replace(/đ/g, 'd');
   };
 
+  /* ---- Mã định danh an toàn ---- */
+  U.isId = (s) => typeof s === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s);
+  U.safeId = (s) => (U.isId(s) ? s : null);
+
   /* ---- HTML ---- */
   U.esc = function (s) {
     return String(s == null ? '' : s)

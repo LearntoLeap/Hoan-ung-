@@ -31,10 +31,6 @@
 
   App.actions.seedDemo = async function () {
     if (!App.cloud.isDemo()) return;
-    if (App.data.docs.length || App.data.expenses.length) {
-      const ok = await new Promise((res) => App.confirmSheet('Nạp thêm dữ liệu mẫu?', 'Dữ liệu mẫu sẽ được thêm vào cạnh dữ liệu bạn đã nhập thử.', () => res(true), false, 'Nạp thêm'));
-      if (!ok) return;
-    }
     App.toast('Đang nạp dữ liệu mẫu…');
     const s = App.settings;
     Object.assign(s, { hoTen: s.hoTen || 'Nguyễn Văn A', tenNgan: s.tenNgan || 'A', boPhan: s.boPhan || 'Chuyên môn', chucVu: s.chucVu || 'Chuyên viên',

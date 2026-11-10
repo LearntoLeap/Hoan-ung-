@@ -324,9 +324,11 @@
   function parseHash() {
     const h = (location.hash || '').replace(/^#\/?/, '');
     const [path, qs] = h.split('?');
-    const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
+    // Chỉ giữ ký tự an toàn trong đường dẫn: mã định danh, danh sách mã — chặn chèn mã HTML qua link
+    const clean = (s) => { let v = ''; try { v = decodeURIComponent(s || ''); } catch (e) { v = ''; } return v.replace(/[^A-Za-z0-9_,.|-]/g, '').slice(0, 2000); };
+    const parts = path.split('/').filter(Boolean).map(clean);
     const q = {};
-    (qs || '').split('&').forEach((kv) => { if (!kv) return; const [k, v] = kv.split('='); q[decodeURIComponent(k)] = decodeURIComponent(v || ''); });
+    (qs || '').split('&').forEach((kv) => { if (!kv) return; const i = kv.indexOf('='); const k = clean(i < 0 ? kv : kv.slice(0, i)); if (k) q[k] = clean(i < 0 ? '' : kv.slice(i + 1)); });
     return { name: parts[0] || '', parts, q };
   }
   App.nav = function (path) {
@@ -341,7 +343,9 @@
     try { await loadData(); } catch (e) { toast('Không đọc được dữ liệu: ' + e.message, 'err'); }
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (document.startViewTransition && !reduce && document.getElementById('screen')) {
-      document.startViewTransition(() => { render(true); window.scrollTo(0, 0); });
+      const vt = document.startViewTransition(() => { render(true); window.scrollTo(0, 0); });
+      // chuyển trang liên tiếp / tab ẩn: hiệu ứng có thể bị bỏ qua — không phải lỗi
+      [vt.ready, vt.finished, vt.updateCallbackDone].forEach((p) => p && p.catch(() => {}));
     } else { render(true); window.scrollTo(0, 0); }
   }
   App.go = go;

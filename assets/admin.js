@@ -99,15 +99,15 @@
     const docRows = docs.map((d) => '<tr><td data-l="Số phiếu"><span class="badge mono primary">' + esc(d.soPhieu) + '</span></td><td data-l="Loại">' + esc(D.TYPES[d.type] ? D.TYPES[d.type].label : d.type) + '</td>' +
       '<td data-l="Nội dung" style="min-width:200px">' + esc(d.noiDung || '—') + '<span class="sub">' + esc(d.ngayLap ? U.fmtDate(d.ngayLap) : '') + (d.eventId ? ' · ' + esc(evName(d.eventId)) : '') + '</span></td>' +
       '<td class="num b" data-l="Số tiền">' + money(D.total(d)) + '</td><td data-l="Trạng thái"><span class="badge ' + D.statusOf(d.status).cls + '">' + D.statusOf(d.status).t + '</span></td>' +
-      '<td class="acts"><button class="btn out xs" data-act="adminPreview:' + d.id + '">' + I('eye') + 'Xem</button><button class="btn out xs" data-act="docWord:' + d.id + '">' + I('word') + 'Word</button>' +
-      '<button class="btn out xs" data-act="docExcel:' + d.id + '">' + I('excel') + 'Excel</button></td></tr>').join('');
+      '<td class="acts"><button class="btn out xs" data-act="adminPreview:' + esc(d.id) + '">' + I('eye') + 'Xem</button><button class="btn out xs" data-act="docWord:' + esc(d.id) + '">' + I('word') + 'Word</button>' +
+      '<button class="btn out xs" data-act="docExcel:' + esc(d.id) + '">' + I('excel') + 'Excel</button></td></tr>').join('');
     const expRows = exps.map((e) => '<tr><td data-l="Ngày" class="nowrap">' + esc(U.fmtDate(e.date)) + '</td><td data-l="Nội dung">' + esc(e.content) + '<span class="sub">' + esc(evName(e.eventId)) + '</span></td>' +
       '<td data-l="Hoá đơn">' + App.vatBadge(e) + '</td><td class="num b" data-l="Số tiền">' + money(e.amount) + '</td></tr>').join('');
     const evRows = events.map((e) => {
       const l = exps.filter((x) => x.eventId === e.id);
       return '<tr><td data-l="Sự kiện"><b>' + esc(e.name) + '</b><span class="sub">' + esc(e.date ? U.fmtDate(e.date) : '') + '</span></td><td class="num" data-l="Khoản chi">' + l.length + '</td><td class="num b" data-l="Thực chi">' + money(l.reduce((a, x) => a + U.toNumber(x.amount), 0)) + '</td></tr>';
     }).join('');
-    const tabBtn = (k, l) => '<button class="' + (tab === k ? 'on' : '') + '" data-act="adminTab:' + ownerId + '|' + k + '">' + l + '</button>';
+    const tabBtn = (k, l) => '<button class="' + (tab === k ? 'on' : '') + '" data-act="adminTab:' + esc(ownerId) + '|' + k + '">' + l + '</button>';
 
     root.innerHTML = '<div class="crumbs"><a href="#/tai-khoan">' + I('left', 14) + 'Quản lý tài khoản</a><span>/</span><span>' + esc(p.full_name || p.email) + '</span></div>' +
       App.pageHead(esc(p.full_name || st.hoTen || p.email), esc(p.email || '') + (p.dept ? ' · ' + esc(p.dept) : '') + ' · <span class="badge out">Chỉ đọc</span>',
@@ -133,7 +133,7 @@
     adminPreview(id) {
       const d = (App.adminDocs || []).find((x) => x.id === id); if (!d) return;
       App.openSheet(App.sheetHead(d.soPhieu, (d.nguoiDeNghi || '') + ' · chỉ đọc') + App.Docs.previewBox(d) +
-        '<div class="sheet-f"><button class="btn out" data-act="adminPrint:' + id + '">' + I('printer') + 'In / PDF</button><button class="btn out" data-act="docWord:' + id + '">' + I('word') + 'Word</button><button class="btn" data-act="docExcel:' + id + '">' + I('excel') + 'Excel</button></div>', { wide: true });
+        '<div class="sheet-f"><button class="btn out" data-act="adminPrint:' + esc(id) + '">' + I('printer') + 'In / PDF</button><button class="btn out" data-act="docWord:' + esc(id) + '">' + I('word') + 'Word</button><button class="btn" data-act="docExcel:' + esc(id) + '">' + I('excel') + 'Excel</button></div>', { wide: true });
       setTimeout(App.Docs.fitPaper, 30);
     },
     async adminReportOwner(kind) {
