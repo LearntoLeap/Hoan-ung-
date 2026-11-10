@@ -63,7 +63,8 @@
     // trên đám mây cũng bị xoá, không "sống lại" ở lần đồng bộ sau.
     async delImagesByExpense(expenseId) {
       const imgs = await DB.byIndex('images', 'expenseId', expenseId);
-      for (const i of imgs) await DB.del('images', i.id);
+      // ảnh chứng từ của phiếu (docId) đi theo phiếu, không xoá theo sự kiện
+      for (const i of imgs) if (!i.docId) await DB.del('images', i.id);
     },
     async delExpense(expenseId) {
       await DB.delImagesByExpense(expenseId);
@@ -80,7 +81,8 @@
       for (const e of exps) await DB.del('expenses', e.id);
       for (const a of advs) await DB.del('advances', a.id);
       // Phiếu giữ lại (chỉ bỏ liên kết sự kiện) — phiếu là chứng từ, không xoá theo sự kiện.
-      for (const d of docs) { d.eventId = null; await DB.put('docs', d); }
+      // phiếu đã được kế toán khoá thì giữ nguyên (không được sửa)
+      for (const d of docs) { if (App.Flow && App.Flow.locked(d)) continue; d.eventId = null; await DB.put('docs', d); }
       await DB.del('events', eventId);
     },
     async clearAllUserData() {

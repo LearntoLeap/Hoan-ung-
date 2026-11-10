@@ -377,7 +377,7 @@
     } catch (e) { console.error(e); App.toast('Lỗi tạo Word: ' + (e.message || e), 'err'); }
   }
 
-  App.Report = { build, excel, word, period };
+  App.Report = { build, excel, word, period, xl: { brandHeader, tableHead, tableRow, totalRow, pageSetup, signBlock, fnt, fill, box, NUM, PURPLE, PINK, HEAD, ZEBRA, GRID, FONT } };
 
   /* ============================== Trang Báo cáo ============================== */
   App.screens['bao-cao'] = function (root) {

@@ -65,7 +65,8 @@
       '<div class="fgrid c2">' + ui.text('pf-soTK', 'Số tài khoản', s.soTK, { cb: 'pfCard' }) + ui.text('pf-nganHang', 'Ngân hàng', s.nganHang, { ph: 'VD: MB Bank', cb: 'pfCard' }) + '</div></div></div></div>' +
       '<div class="card"><div class="card-h"><h3>Đăng nhập &amp; đồng bộ</h3></div><div class="card-b">' +
       '<div class="kv"><div class="k">Email</div><div class="v">' + esc(u.email || '') + '</div></div>' +
-      '<div class="kv"><div class="k">Quyền</div><div class="v">' + (App.isAdmin() ? '<span class="badge accent">Quản trị</span>' : '<span class="badge out">Người dùng</span>') + '</div></div>' +
+      '<div class="kv"><div class="k">Vai trò</div><div class="v">' + App.Flow.roleBadge(App.Flow.role()) + '</div></div>' +
+      '<div class="kv"><div class="k">Thông báo thiết bị</div><div class="v">' + ({ granted: '<span class="badge ok">Đang bật</span>', denied: '<span class="badge danger">Bị chặn</span>', unsupported: '<span class="badge out">Không hỗ trợ</span>' }[App.Flow.pushState()] || '<button class="btn xs" data-act="enablePush">' + I('bell') + 'Bật</button>') + '</div></div>' +
       '<div class="kv"><div class="k">Đồng bộ gần nhất</div><div class="v">' + esc(App.cloud.lastSync ? U.fmtDateTime(App.cloud.lastSync) : '—') + '</div></div>' +
       '<div class="kv"><div class="k">Thùng rác</div><div class="v"><a href="#/thung-rac">' + (App.trashCount || 0) + ' mục</a></div></div>' +
       '<div class="stack mt16" style="gap:8px"><button class="btn out block" data-act="syncNow">' + I('refresh') + 'Đồng bộ ngay</button><button class="btn out block" data-act="changePassword">' + I('key') + 'Đổi mật khẩu</button>' +
@@ -111,12 +112,18 @@
       step(2, 'Tạm ứng', 'Mục <b>Tạm ứng → Tạo phiếu</b>: nội dung, mục đích, bảng kê dự chi. Số phiếu DNTU-YYYYMM-STT tự nhảy, số tiền bằng chữ tự đọc. Xuất <b>Word / Excel / In PDF</b>.') +
       step(3, 'Chi tiêu', 'Mục <b>Chi tiêu</b>: mỗi lần chi ghi một khoản, chụp bill, chọn loại hoá đơn. Khoản chi gắn với sự kiện / đợt chi.') +
       step(4, 'Hoàn ứng', 'Từ phiếu tạm ứng bấm <b>Lập phiếu hoàn ứng</b> (hoặc từ trang Chi tiêu): bảng kê lấy từ khoản chi thực tế, phiếu tự kết luận <b>NỘP LẠI</b> quỹ hay <b>CHI BÙ</b>.') +
-      step(5, 'Thanh toán', 'Chi trước không qua tạm ứng: lập <b>phiếu thanh toán</b>, có thể lấy bảng kê từ khoản chi.') +
+      step(5, 'Thanh toán', 'Chi trước không qua tạm ứng: lập <b>phiếu thanh toán</b> (DNTT độc lập), có thể lấy bảng kê từ khoản chi.') +
+      step(6, 'Gửi duyệt', 'Bấm <b>Gửi duyệt</b> — kế toán nhận thông báo. Hoàn ứng / thanh toán cần <b>ảnh chứng từ từng dòng</b> ' + I('camera', 13) + ' và <b>tình trạng hoá đơn</b>. Chưa duyệt thì <b>Rút lại</b> để sửa hoặc xoá được.') +
+      step(7, 'Kế toán duyệt', 'Kế toán <b>Duyệt / Duyệt chi / Cần xem xét lại / Từ chối</b>, đối chiếu từng dòng, nhắn trực tiếp hoặc <b>yêu cầu giải trình</b>. Phiếu đã duyệt bị <b>khoá</b>: không sửa, không xoá.') +
+      step(8, 'Tất toán tạm ứng', 'Hoàn ứng <b>thừa</b> → chuyển trả TK công ty, bấm <b>Báo đã nộp lại</b> (kèm mã GD) để kế toán xác nhận. <b>Thiếu</b> → bấm <b>Lập DNTT bù</b> gắn với phiếu hoàn ứng.') +
+      step(9, 'Đối chiếu & báo cáo', 'Mục <b>Đối chiếu & sổ</b>: theo dõi tạm ứng đã / chưa hoàn ứng, sổ giao dịch, DNTT bù / độc lập, hoá đơn — theo tháng, quý, năm; xuất Excel, Word, PDF, gửi Zalo.') +
       '</div></div>' +
       '<div class="card"><div class="card-h"><div class="t">' + I('info') + 'Lưu ý</div></div><div class="card-b stack" style="gap:10px">' +
       '<div class="alert info">' + I('info') + '<div><b>Bảng kê:</b> khoản trọn gói không có số lượng → để trống SL, nhập số tiền vào Đơn giá (giống mẫu Excel).</div></div>' +
       '<div class="alert info">' + I('info') + '<div><b>Ngày lập để trống</b> → phiếu in dòng "Hà Nội, ngày ..... tháng ..... năm ....." để ký tay.</div></div>' +
-      '<div class="alert">' + I('shield') + '<div><b>Tài khoản:</b> mỗi người tự tạo tài khoản, chỉ thấy dữ liệu của mình. Tài khoản quản trị xem được mọi tài khoản (chỉ đọc) để kiểm soát.</div></div>' +
+      '<div class="alert">' + I('shield') + '<div><b>Phân quyền:</b> nhân sự tự tạo tài khoản, chỉ thấy dữ liệu của mình. <b>Kế toán</b> và <b>Quản trị</b> (quyền như nhau) xem tất cả, duyệt chứng từ, đổi vai trò, cấp lại mật khẩu, xem ai đang dùng app.</div></div>' +
+      '<div class="alert">' + I('bell') + '<div><b>Thông báo:</b> bấm chuông trên thanh trên → <b>Bật</b> để nhận thông báo trên điện thoại / máy tính / máy tính bảng. iPhone / iPad: Chia sẻ → <b>Thêm vào MH chính</b>, mở app từ biểu tượng rồi bật.</div></div>' +
+      '<div class="alert">' + I('clock') + '<div><b>Lịch sử sửa:</b> mọi lần lưu, gửi, duyệt, thêm / xoá chứng từ đều được ghi lại trong tab <b>Lịch sử sửa</b> của từng phiếu.</div></div>' +
       '<div class="alert">' + I('cloud') + '<div><b>Offline:</b> sau lần đăng nhập đầu, app chạy cả khi mất mạng và tự đồng bộ khi có mạng lại (chấm tròn trên thanh trên cùng).</div></div>' +
       '<div class="alert">' + I('download') + '<div>Cần mẫu điền tay? <button class="btn out xs" data-act="downloadBlank">' + I('download') + 'Tải mẫu Excel trống</button></div></div>' +
       '</div></div></div>';

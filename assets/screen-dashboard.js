@@ -8,7 +8,7 @@
   const App = window.App, esc = U.esc, I = App.icon;
   const money = (n) => U.groupThousand(n) + ' đ';
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-  const STATUS_PCT = { nhap: 15, 'da-gui': 45, 'da-duyet': 75, 'da-chi': 100, 'tu-choi': 100 };
+  const STATUS_PCT = { nhap: 15, 'cho-duyet': 45, 'can-bo-sung': 35, 'da-duyet': 75, 'da-chi': 100, 'tu-choi': 100 };
   const TYPE_G = { TU: 'g-pp', HU: 'g-bl', TT: 'g-or' };
   const monthKey = (iso) => String(iso || '').slice(0, 7);
   const pctTxt = (a, b) => { if (!b) return a ? '<span class="up">mới</span>' : ''; const p = Math.round((a - b) / b * 100); return '<span class="' + (p >= 0 ? 'up' : 'down') + '">' + (p >= 0 ? '+' : '') + p + '%</span>'; };
@@ -21,9 +21,9 @@
     const sumDocs = (type, m) => docs.filter((d) => d.type === type && (!m || monthKey(d.ngayLap) === m)).reduce((a, d) => a + D.total(d), 0);
     const sumExp = (m) => exps.filter((e) => !m || monthKey(e.date) === m).reduce((a, e) => a + U.toNumber(e.amount), 0);
     const spent = sumExp(), vat = exps.filter((e) => App.vatTypeOf(e) === 'vat').reduce((a, e) => a + U.toNumber(e.amount), 0);
-    const pending = docs.filter((d) => ['nhap', 'da-gui', 'tu-choi'].includes(d.status || 'nhap'));
-    const settled = new Set(docs.filter((d) => d.type === 'HU' && d.tuDocId).map((d) => d.tuDocId));
-    const openTU = docs.filter((d) => d.type === 'TU' && !settled.has(d.id));
+    const Fl = App.Flow;
+    const pending = docs.filter((d) => ['nhap', 'cho-duyet', 'can-bo-sung'].includes(Fl.status(d)));
+    const openTU = Fl.analyze({ docs }).tus.filter((x) => x.k === 'open').map((x) => x.tu);
     const byExp = App.imagesByExpense();
     const noProof = exps.filter((e) => !(byExp[e.id] || []).length).length;
     const pv = spent ? Math.round(vat / spent * 100) : 0;
@@ -33,14 +33,14 @@
 
     // ---- bảng phiếu gần đây
     const rows = docs.slice(0, 7).map((d) => {
-      const st = D.statusOf(d.status), p = STATUS_PCT[d.status || 'nhap'];
+      const sv = Fl.status(d), st = Fl.ST[sv], p = STATUS_PCT[sv];
       const who = Array.from(new Set(D.filledItems(d).map((it) => (it.nguoiThamGia || '').split(/[,;]/)[0].trim()).filter(Boolean))).slice(0, 4);
       const cols = ['g-pp', 'g-bl', 'g-or', 'g-gr'];
       return '<tr class="click" data-href="#/phieu/' + d.id + '"><td data-l="Phiếu"><div class="row" style="flex-wrap:nowrap;gap:12px"><span class="' + TYPE_G[d.type] + '" style="width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:#fff;flex:none;box-shadow:var(--bong-ic)">' + I(D.TYPES[d.type].ic, 15) + '</span>' +
         '<span style="min-width:0"><b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px">' + esc(d.noiDung || D.TYPES[d.type].label) + '</b><span class="sub">' + esc(d.soPhieu) + '</span></span></div></td>' +
         '<td data-l="Người" class="hide-m"><div class="av-stack">' + (who.length ? who.map((w, i) => '<span class="' + cols[i % 4] + '" title="' + esc(w) + '">' + esc(w.charAt(0).toUpperCase()) + '</span>').join('') : '<span class="g-dk">' + esc((d.nguoiDeNghi || '?').trim().split(/\s+/).pop().charAt(0)) + '</span>') + '</div></td>' +
         '<td class="num b" data-l="Số tiền">' + money(D.total(d)) + '</td>' +
-        '<td data-l="Tiến độ"><div class="mini-bar"><b>' + (d.status === 'tu-choi' ? 'Trả lại' : p + '%') + ' · <span class="muted" style="font-weight:600">' + st.t + '</span></b><div class="progress lg ' + (d.status === 'tu-choi' ? 'danger' : p === 100 ? 'ok' : 'info') + '"><span style="width:' + p + '%"></span></div></div></td></tr>';
+        '<td data-l="Tiến độ"><div class="mini-bar"><b>' + (sv === 'tu-choi' ? 'Từ chối' : p + '%') + ' · <span class="muted" style="font-weight:600">' + st.s + '</span></b><div class="progress lg ' + (sv === 'tu-choi' ? 'danger' : sv === 'can-bo-sung' ? 'warn' : p === 100 ? 'ok' : 'info') + '"><span style="width:' + p + '%"></span></div></div></td></tr>';
     }).join('');
 
     // ---- dòng thời gian hoạt động
@@ -51,7 +51,7 @@
     acts.sort((a, b) => String(b.t || '').localeCompare(String(a.t || '')));
     const tl = acts.slice(0, 7).map((a) => '<a class="tl" href="' + a.href + '"><span class="td ' + a.c + '">' + I(a.ic) + '</span><span style="min-width:0"><b>' + esc(a.b) + '</b><small>' + esc(a.t ? U.fmtDateTime(a.t) : '') + '</small></span></a>').join('');
 
-    root.innerHTML = (App.demoBanner ? App.demoBanner() : '') +
+    root.innerHTML = (App.demoBanner ? App.demoBanner() : '') + todoCard() +
       (!s.hoTen || !s.soTK ? '<div class="alert warn" style="margin-bottom:20px">' + I('alert') + '<div><b>Hoàn thiện hồ sơ cá nhân</b> (họ tên, bộ phận, số tài khoản) để phiếu được điền sẵn. <a href="#/ca-nhan">Mở hồ sơ →</a></div></div>' : '') +
       '<div class="kpis k4">' +
       kpi('#/tam-ung', 'file', 'Tạm ứng tháng này', money(tuM), pctTxt(tuM, tuP)) +
@@ -86,7 +86,7 @@
       '</div>' +
 
       '<div class="grid g-84 mt24">' +
-      '<div class="card"><div class="card-h"><div><h3>Phiếu gần đây</h3><div class="muted" style="font-size:13px;margin-top:2px">' + I('check', 13).replace('class="ico"', 'class="ico" style="display:inline;color:hsl(var(--chinh));vertical-align:-2px"') + ' <b>' + docs.filter((d) => d.status === 'da-chi').length + ' đã chi</b> / ' + docs.length + ' phiếu</div></div>' +
+      '<div class="card"><div class="card-h"><div><h3>Phiếu gần đây</h3><div class="muted" style="font-size:13px;margin-top:2px">' + I('check', 13).replace('class="ico"', 'class="ico" style="display:inline;color:hsl(var(--chinh));vertical-align:-2px"') + ' <b>' + docs.filter((d) => Fl.status(d) === 'da-chi').length + ' đã duyệt chi</b> / ' + docs.length + ' phiếu</div></div>' +
       '<a class="btn sm out" href="#/thanh-toan">Xem tất cả</a></div><div class="card-b flush">' +
       (rows ? '<div class="tbl-wrap"><table class="tbl cards"><thead><tr><th>Phiếu</th><th class="hide-m">Người tham gia</th><th class="num">Số tiền</th><th>Tiến độ</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
         : App.emptyState('file', 'Chưa có phiếu nào', 'Lập phiếu đầu tiên theo mẫu công ty.', '<a class="btn" href="#/phieu/moi/TU">' + I('plus') + 'Lập phiếu tạm ứng</a>')) + '</div></div>' +
@@ -97,6 +97,17 @@
     buildCharts();
   };
 
+  // Việc cần làm / nhắc việc theo vai trò (kế toán: phiếu chờ duyệt, nộp lại… · nhân sự: bổ sung, hoàn ứng…)
+  function todoCard() {
+    const Fl = App.Flow; if (!Fl) return '';
+    const rem = Fl.reminders();
+    const acc = Fl.isAcc();
+    if (!rem.length && !acc) return '';
+    return '<div class="card todo-card"><div class="card-h"><div class="t">' + I('flag') + (acc ? 'Việc của kế toán hôm nay' : 'Việc cần làm') + ' <span class="cnt0">' + rem.length + '</span></div>' +
+      (acc ? '<a class="btn sm" href="#/duyet">' + I('inbox') + 'Mở hàng chờ duyệt</a>' : '<button class="btn out sm" data-act="openBell">' + I('bell') + 'Thông báo</button>') + '</div><div class="card-b todo-list">' +
+      (rem.length ? rem.slice(0, 6).map((x) => '<a class="nt-it" href="' + esc(x.link) + '"><span class="nt-ic ' + esc(x.lv) + '">' + I(x.ic, 16) + '</span><span class="nt-b"><b>' + esc(x.t) + '</b><small>' + esc(x.s || '') + '</small></span>' + I('right', 16) + '</a>').join('')
+        : '<p class="muted" style="margin:0;font-size:13px">Không có việc tồn đọng. ' + (Fl.isAcc() ? 'Phiếu mới gửi lên sẽ có thông báo.' : '') + '</p>') + '</div></div>';
+  }
   function stat(g, ic, label, value, pct) {
     return '<div><div class="si"><i class="' + g + '">' + I(ic) + '</i>' + esc(label) + '</div><div class="sv">' + value + '</div>' +
       '<div class="progress dark"><span style="width:' + Math.max(4, Math.min(100, pct)) + '%"></span></div></div>';

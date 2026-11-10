@@ -5,7 +5,7 @@
    - Thư viện / ảnh: dùng bản đã lưu (đổi VERSION khi thay thư viện).
    Đổi VERSION ở mỗi lần phát hành để xoá cache cũ. */
 'use strict';
-const VERSION = 'ltl-v25';
+const VERSION = 'ltl-v26';
 const CORE = 'ltl-core-' + VERSION;
 
 const SHELL = [
@@ -17,6 +17,7 @@ const SHELL = [
   './assets/db.js',
   './assets/app.js',
   './assets/ui.js',
+  './assets/flow.js',
   './assets/forms.js',
   './assets/export.js',
   './assets/screen-dashboard.js',
@@ -25,6 +26,9 @@ const SHELL = [
   './assets/trash.js',
   './assets/report.js',
   './assets/admin.js',
+  './assets/review.js',
+  './assets/ledger.js',
+  './assets/pdf.js',
   './assets/demo.js',
   './assets/cloud.js',
   './assets/logo-mark.png',
@@ -35,6 +39,8 @@ const SHELL = [
   './lib/exceljs.min.js',
   './lib/chart.umd.min.js',
   './lib/supabase.js',
+  './lib/jspdf.umd.min.js',
+  './lib/html2canvas.min.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',
@@ -94,4 +100,16 @@ self.addEventListener('fetch', (e) => {
       .then((res) => putCopy(req, res))
       .catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || Response.error()))
   );
+});
+
+// Bấm vào thông báo trên thiết bị → mở app đúng phiếu / trang
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const link = (e.notification.data && e.notification.data.link) || '#/';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    for (const c of list) {
+      if (c.url.indexOf(self.registration.scope) === 0) { c.postMessage({ type: 'open', link }); return c.focus(); }
+    }
+    return self.clients.openWindow('./' + link);
+  }));
 });

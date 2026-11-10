@@ -21,7 +21,7 @@
   const KIND_STORE = { event: 'events', advance: 'advances', expense: 'expenses', image: 'images', settings: 'settings', doc: 'docs' };
 
   const Cloud = {
-    client: null, user: null, isAdmin: false,
+    client: null, user: null, isAdmin: false, role: 'staff',
     state: 'idle',       // idle | offline | signedout | syncing | ok | error
     lastSync: localStorage.getItem('ltl_lastsync') || '',
     _applying: false, _pushTimer: null,
@@ -105,23 +105,35 @@
   }
   async function signOut() {
     const wasDemo = Cloud.demo;
-    if (wasDemo) { try { localStorage.removeItem('ltl_demo'); } catch (e) {} Cloud.demo = false; }
+    if (App.Flow) App.Flow.stop();
+    if (wasDemo) { try { localStorage.removeItem('ltl_demo'); } catch (e) {} Cloud.demo = false; if (App.Demo) await App.Demo.wipe(); }
     else if (Cloud.client) { try { await Cloud.client.auth.signOut(); } catch (e) {} }
-    Cloud.user = null; Cloud.isAdmin = false;
+    Cloud.user = null; Cloud.isAdmin = false; Cloud.role = 'staff';
     await clearLocalData();
     try { localStorage.removeItem(OWNER_KEY); } catch (e) {}
     setState('signedout');
     try { await App.ensureSettings(); } catch (e) {}
   }
 
+  // Vai trò: admin / ketoan (quyền như nhau, xem tất cả) / staff (chỉ dữ liệu của mình)
+  const ROLE_KEY = (id) => 'ltl_role_' + id;
+  function setRole(r) {
+    Cloud.role = r === 'admin' || r === 'ketoan' ? r : 'staff';
+    Cloud.isAdmin = Cloud.role !== 'staff';
+  }
+  function cachedRole() {
+    let r = ''; try { r = localStorage.getItem(ROLE_KEY(Cloud.user && Cloud.user.id)) || ''; } catch (e) {}
+    if (!r) { try { r = localStorage.getItem('ltl_admin_' + (Cloud.user && Cloud.user.id)) === '1' ? 'admin' : 'staff'; } catch (e) {} }
+    setRole(r);
+  }
   async function checkAdmin() {
-    Cloud.isAdmin = false;
-    if (!Cloud.ready()) { Cloud.isAdmin = localStorage.getItem('ltl_admin_' + (Cloud.user && Cloud.user.id)) === '1'; return; }
-    try {
-      const { data, error } = await Cloud.client.rpc('ltl_is_admin');
-      Cloud.isAdmin = !error && data === true;
-    } catch (e) { Cloud.isAdmin = false; }
-    try { localStorage.setItem('ltl_admin_' + Cloud.user.id, Cloud.isAdmin ? '1' : '0'); } catch (e) {}
+    if (Cloud.demo) return;
+    if (!Cloud.ready()) { cachedRole(); return; }
+    let r = null;
+    try { r = App.Flow ? await App.Flow.B().role() : null; } catch (e) { r = null; }
+    if (r == null) { cachedRole(); return; }
+    setRole(r);
+    try { localStorage.setItem(ROLE_KEY(Cloud.user.id), Cloud.role); } catch (e) {}
   }
   // Ghi hồ sơ tài khoản để quản trị thấy danh sách người dùng (bỏ qua nếu bảng chưa tạo)
   async function upsertProfile() {
@@ -141,6 +153,8 @@
   async function onSignedIn() {
     if (!Cloud.user) return;
     await enforceAccount(Cloud.user.id);
+    await checkAdmin();
+    try { if (App.Flow) await App.Flow.poll({ quiet: true }); } catch (e) {}   // biết phiếu nào đã khoá trước khi đẩy lên
     try { await sync(); } catch (e) {}
     await App.ensureSettings();
     const meta = Cloud.user.user_metadata || {};
@@ -242,12 +256,19 @@
     }
     return out;
   }
-  async function upsertBatches(rows) {
+  // rejected: Set nhận id các dòng máy chủ từ chối (phiếu đã được kế toán khoá) — bỏ qua, không làm hỏng cả lô
+  async function upsertBatches(rows, rejected) {
     let batch = [], bytes = 0;
     const flush = async () => {
       if (!batch.length) return;
       const { error } = await Cloud.client.from(TABLE).upsert(batch, { onConflict: 'owner,id' });
-      if (error) throw error;
+      if (error) {
+        if (!rejected || !/row-level security|42501|policy/i.test(String(error.message || '') + ' ' + (error.code || ''))) throw error;
+        for (const one of batch) {
+          const r2 = await Cloud.client.from(TABLE).upsert([one], { onConflict: 'owner,id' });
+          if (r2.error) { if (/row-level security|42501|policy/i.test(String(r2.error.message || '') + ' ' + (r2.error.code || ''))) rejected.add(String(one.id)); else throw r2.error; }
+        }
+      }
       batch = []; bytes = 0;
     };
     for (const r of rows) {
@@ -270,10 +291,14 @@
     let pushed = 0, pulled = 0, removed = 0;
     try {
       // 0) đẩy các lần xoá (bia mộ) lên server
+      const locked = (id) => !!(App.Flow && App.Flow.serverLocked(id));
+      const rejected = new Set();
       const t = tombs();
       if (t.length) {
         const now = U.nowISO();
-        await upsertBatches(t.map((x) => ({ owner, id: x.id, kind: x.kind || 'doc', updated_at: x.at || now, data: { _deleted: true } })));
+        // phiếu đã khoá không được xoá → bỏ bia mộ, lần kéo về sẽ khôi phục
+        const okT = t.filter((x) => !(x.kind === 'doc' && locked(x.id)));
+        await upsertBatches(okT.map((x) => ({ owner, id: x.id, kind: x.kind || 'doc', updated_at: x.at || now, data: { _deleted: true } })), rejected);
         const done = new Set(t.map((x) => x.id));
         saveTombs(tombs().filter((x) => !done.has(x.id)));   // giữ bia mộ phát sinh trong lúc đẩy
       }
@@ -287,14 +312,17 @@
         const L = localMap.get(id), R = remoteMap.get(id);
         const lt = L ? Date.parse(L.updated_at) || 0 : 0, rt = R ? Date.parse(R.updated_at) || 0 : 0;
         if (R && R.del) { if (L) { if (lt > rt) toRemote.push(L); else toDelete.push(L); } return; }
+        // phiếu đã được kế toán khoá: không đẩy bản trên máy, luôn lấy bản máy chủ
+        if (L && R && L.kind === 'doc' && locked(id)) { if (lt !== rt) toLocalIds.push(id); return; }
         if (L && R) { if (lt > rt) toRemote.push(L); else if (rt > lt) toLocalIds.push(id); }
         else if (L) toRemote.push(L); else if (R) toLocalIds.push(id);
       });
       if (toRemote.length) {
         const rows = [];
         for (const it of toRemote) rows.push(await serializeForRemote(it));
-        await upsertBatches(rows);
-        pushed = rows.length;
+        await upsertBatches(rows, rejected);
+        pushed = rows.length - rejected.size;
+        rejected.forEach((id) => { if (remoteMap.has(id) && !toLocalIds.includes(id)) toLocalIds.push(id); });
       }
       for (const L of toDelete) { await _del(L.store, L.id); removed++; }
       for (let i = 0; i < toLocalIds.length; i += 12) {
@@ -341,6 +369,7 @@
 
   /* ----------------------------- Bọc DB.put / DB.del ----------------------------- */
   const _put = DB.put.bind(DB);
+  Cloud._rawPut = _put;   // ghi nguyên trạng (không đóng dấu giờ, không đẩy) — dùng khi nạp dữ liệu
   DB.put = function (store, value) {
     if (SYNCED[store] && value && typeof value === 'object') { value.updatedAt = U.nowISO(); Cloud._dirtyAt = Date.now(); }
     return _put(store, value).then((v) => { if (SYNCED[store]) schedulePush(); return v; });
@@ -356,12 +385,10 @@
 
   /* ----------------------------- Khởi động ----------------------------- */
   Cloud.init = async function () {
-    let demo = ''; try { demo = localStorage.getItem('ltl_demo') || ''; if (demo === 'admin' && !LOCAL_DEV) demo = '1'; } catch (e) {}
-    if (demo) {
-      Cloud.demo = true; Cloud.user = { id: 'local-demo', email: 'dung-thu@may-nay', user_metadata: { full_name: 'Người dùng thử' } };
-      Cloud.isAdmin = demo === 'admin';
-      await enforceAccount(Cloud.user.id); await App.ensureSettings(); setState('ok');
-      return;
+    let demo = ''; try { demo = localStorage.getItem('ltl_demo') || ''; } catch (e) {}
+    if (demo && App.Demo) {
+      try { await App.Demo.resume(); setState('ok'); return; }
+      catch (e) { console.error(e); try { localStorage.removeItem('ltl_demo'); } catch (er) {} Cloud.demo = false; Cloud.user = null; }
     }
     if (!Cloud._interval) Cloud._interval = setInterval(() => { Cloud.maybeSync(); }, 60000);
     try { await ensureClient(); } catch (e) { setState('error'); }
@@ -369,14 +396,16 @@
       // đã có phiên lưu trên máy (kể cả offline) → vào thẳng app
       await enforceAccount(Cloud.user.id);
       await App.ensureSettings();
-      Cloud.isAdmin = localStorage.getItem('ltl_admin_' + Cloud.user.id) === '1';
+      cachedRole();
       setState(navigator.onLine ? 'ok' : 'offline');
       // đồng bộ + kiểm tra quyền chạy nền, không chặn giao diện
       setTimeout(async () => {
+        const was = Cloud.role;
+        await checkAdmin();
+        try { if (App.Flow && App.user) await App.Flow.poll({ quiet: true }); } catch (e) {}
         try { await sync({ quiet: true }); } catch (e) {}
-        const was = Cloud.isAdmin;
-        await checkAdmin(); upsertProfile();
-        if (was !== Cloud.isAdmin && App.user) App.render();
+        upsertProfile();
+        if (was !== Cloud.role && App.user) { if (App.Flow) App.Flow.start(); App.render(); }
       }, 50);
     } else setState('signedout');
   };
@@ -404,7 +433,7 @@
           '<div class="center mt16 muted" style="font-size:13.5px">Chưa có tài khoản? <a href="#" data-act="authTab:signup"><b class="grad-text">Tạo tài khoản</b></a></div>' +
           '<div class="center mt8"><button class="btn ghost sm" data-act="forgotPass" style="text-transform:none">Quên mật khẩu?</button></div>' +
           '<div class="sn-hr" style="margin:18px 0"></div><button class="btn out block" data-act="tryDemo">' + I('sparkle') + 'Dùng thử không cần tài khoản</button>' +
-          '<p class="muted center" style="font-size:12px;margin:8px 0 0">Chạy ngay trên máy này, không đồng bộ. Có sẵn nút nạp dữ liệu mẫu.</p>'
+          '<p class="muted center" style="font-size:12px;margin:8px 0 0">4 tài khoản mẫu (nhân sự, kế toán, quản trị) có sẵn dữ liệu — thử trọn quy trình gửi ↔ duyệt ngay trên máy này.</p>'
         : '<h2 class="t">Tạo tài khoản</h2><p class="lead">Mỗi người tự tạo tài khoản bằng email công việc. Thông tin này được điền sẵn vào phiếu.</p>' +
           '<form id="auth-form" novalidate>' + ui.text('au-name', 'Họ và tên', '', { auto: 'name', ph: 'Nguyễn Văn A', req: true }) +
           ui.text('au-dept', 'Bộ phận', '', { list: 'au-dl', ph: 'Chọn hoặc gõ bộ phận' }) + ui.datalist('au-dl', App.DEFAULT_SETTINGS.boPhanList) +
@@ -505,14 +534,11 @@
     async tryDemo() {
       // máy đang giữ dữ liệu của một tài khoản thật (chưa đăng xuất) → không cho dùng thử kẻo xoá mất
       let owner = ''; try { owner = localStorage.getItem(OWNER_KEY) || ''; } catch (e) {}
-      if (owner && owner !== 'local-demo') {
+      if (owner && owner !== 'local-demo' && !/^demo-/.test(owner)) {
         const n = (await DB.all('docs')).length + (await DB.all('expenses')).length + (await DB.all('events')).length;
         if (n) { App.toast('Máy này còn dữ liệu của tài khoản đang dùng. Hãy đăng nhập lại và đăng xuất trước khi dùng thử.', 'err'); return; }
       }
-      try { localStorage.setItem('ltl_demo', '1'); } catch (e) {}
-      await Cloud.init();
-      await App.afterLogin();
-      App.toast('Đang dùng thử — dữ liệu chỉ lưu trên máy này', 'ok');
+      App.demoPicker();
     },
     async forgotPass() {
       const email = App.val('au-email');

@@ -234,7 +234,8 @@
   const COLS = (() => { const sum = COLW.reduce((a, b) => a + b, 0); const w = COLW.map((x) => Math.round(x / sum * CW)); w[7] += CW - w.reduce((a, b) => a + b, 0); return w; })();
   const span = (a, b) => COLS.slice(a, b + 1).reduce((x, y) => x + y, 0);
 
-  async function word(d) {
+  async function word(d, opts) {
+    opts = opts || {};
     try {
       const D = Docs();
       const X = await App.ensureLib('docx');
@@ -401,8 +402,10 @@
         sections: [{ properties: { page: { size: { width: PAGE_W, height: 16838 }, margin: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } } }, children }],
       });
       const blob = await X.Packer.toBlob(doc);
+      if (opts.blobOnly) return blob;
       U.saveBlob(blob, D.fileName(d, 'docx'));
       App.toast('Đã tạo file Word', 'ok');
+      return blob;
     } catch (e) {
       console.error(e);
       App.toast('Lỗi tạo Word: ' + (e.message || e), 'err');

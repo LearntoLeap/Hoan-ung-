@@ -281,10 +281,18 @@
     imgFromCam() { App.closeSheet(); openCamera((b) => addImages(b)); },
     async imgFromLib() { App.closeSheet(); const fs = await App.pickFiles('image/*,video/*', true); if (fs.length) addImages(fs); },
     async delExpense(id) {
+      // khoản chi đã nằm trong phiếu đã gửi / đã duyệt là chứng từ của phiếu → không xoá
+      const used = App.data.docs.find((d) => App.Flow && App.Flow.status(d) !== 'nhap' && (d.items || []).some((it) => it.expenseId === id));
+      if (used) { App.toast('Khoản chi này là chứng từ của phiếu ' + used.soPhieu + ' (' + App.Flow.ST[App.Flow.status(used)].s + ') — không xoá được', 'err'); return; }
       App.draftExpense = null; App.closeAllSheets();
       await App.Trash.soft([{ store: 'expenses', id }]);
     },
-    async selExpTrash() { const ids = App.Sel.list(); await App.Trash.soft(ids.map((id) => ({ store: 'expenses', id }))); },
+    async selExpTrash() {
+      const used = new Set(); App.data.docs.forEach((d) => { if (App.Flow && App.Flow.status(d) !== 'nhap') (d.items || []).forEach((it) => { if (it.expenseId) used.add(it.expenseId); }); });
+      const ids = App.Sel.list(), ok = ids.filter((id) => !used.has(id));
+      if (ok.length < ids.length) App.toast((ids.length - ok.length) + ' khoản chi thuộc phiếu đã gửi duyệt — giữ lại', 'err');
+      if (ok.length) await App.Trash.soft(ok.map((id) => ({ store: 'expenses', id })));
+    },
     selExpDoc(type) {
       const ids = App.Sel.list(); if (!ids.length) return;
       const ev = (App.data.expenses.find((x) => x.id === ids[0]) || {}).eventId || '';
