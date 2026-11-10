@@ -1087,3 +1087,29 @@ tr.row-off td{opacity:.55}
 .myrep-total small{font-size:12.5px;color:hsl(var(--chu-nhat))}
 .myrep .myrep-gh td{background:hsl(var(--chinh)/.07);padding-top:12px;padding-bottom:10px}
 .myrep .myrep-gh .progress{max-width:260px}
+
+/* đối chiếu (kế toán) */
+.dc-bar .card-b{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px}
+.dc-period{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.dc-pick{display:flex;gap:6px;align-items:center}
+.dc-pick .input,.dc-pick .select{min-height:40px;width:auto}
+.dc-filters{display:flex;gap:8px;flex-wrap:wrap}
+.dc-filters .field{min-width:170px}
+.dc-qs{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.dc-q{display:flex;gap:10px;align-items:center;text-align:left;border:1px solid hsl(var(--vien));background:hsl(var(--the));border-radius:14px;padding:12px;cursor:pointer;font:inherit;color:inherit;transition:border-color .2s,box-shadow .2s,transform .15s}
+.dc-q:hover{transform:translateY(-1px);box-shadow:var(--bong)}
+.dc-q .dc-qi{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:none;background:hsl(var(--chinh)/.12);color:hsl(var(--chinh-dam))}
+.dc-q.ok .dc-qi{background:hsl(var(--thanh-cong)/.13);color:hsl(var(--thanh-cong-dam))}
+.dc-q.warn .dc-qi{background:hsl(var(--canh-bao)/.15);color:hsl(var(--canh-bao-dam))}
+.dc-q.danger .dc-qi{background:hsl(var(--nguy-hiem)/.12);color:hsl(var(--nguy-hiem-dam))}
+.dc-q.accent .dc-qi{background:hsl(var(--nhan-manh)/.12);color:hsl(var(--nhan-manh-dam))}
+.dc-q.out .dc-qi{background:hsl(var(--phu));color:hsl(var(--chu-nhat))}
+.dc-qb{min-width:0;display:flex;flex-direction:column}
+.dc-qb small{font-size:12px;font-weight:600;color:hsl(var(--chu-nhat));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dc-qb b{font-size:20px;line-height:1.2;color:hsl(var(--chu-dam));font-family:var(--font-heading)}
+.dc-qb i{font-style:normal;font-size:12px;color:hsl(var(--chu-nhat))}
+.dc-q.on{border-color:hsl(var(--chinh));box-shadow:inset 0 0 0 1px hsl(var(--chinh)),var(--bong)}
+.dc-codes{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px}
+.dc-code{font-size:11.5px;background:hsl(var(--phu));border-radius:6px;padding:1px 6px;color:hsl(var(--chu-nhat));white-space:nowrap}
+.dc-code b{font-family:ui-monospace,Menlo,monospace;color:hsl(var(--chu-dam));font-weight:600}
+.dc-tbl td b.mono{white-space:nowrap}

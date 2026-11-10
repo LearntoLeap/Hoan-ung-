@@ -14,22 +14,30 @@
   const F = () => App.Flow, D = () => App.Docs;
 
   const iso = (x) => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
-  function range(p) {
-    const d = new Date(), y = d.getFullYear(), m = d.getMonth();
-    if (p === 'thang') return [iso(new Date(y, m, 1)), iso(new Date(y, m + 1, 0)), 'Tháng ' + (m + 1) + '/' + y];
-    if (p === 'prev') { const a = new Date(y, m - 1, 1); return [iso(a), iso(new Date(y, m, 0)), 'Tháng ' + (a.getMonth() + 1) + '/' + a.getFullYear()]; }
-    if (p === 'quy') { const q = Math.floor(m / 3); return [iso(new Date(y, q * 3, 1)), iso(new Date(y, q * 3 + 3, 0)), 'Quý ' + (q + 1) + '/' + y]; }
-    if (p === 'quytruoc') { const q = Math.floor(m / 3) - 1, yy = q < 0 ? y - 1 : y, qq = (q + 4) % 4; return [iso(new Date(yy, qq * 3, 1)), iso(new Date(yy, qq * 3 + 3, 0)), 'Quý ' + (qq + 1) + '/' + yy]; }
-    if (p === 'nam') return [y + '-01-01', y + '-12-31', 'Năm ' + y];
-    if (p === 'namtruoc') return [(y - 1) + '-01-01', (y - 1) + '-12-31', 'Năm ' + (y - 1)];
+  /* ---------------- kỳ đối chiếu: ngày / tháng / quý / năm / tuỳ chọn ---------------- */
+  const MODES = [['ngay', 'Ngày'], ['thang', 'Tháng'], ['quy', 'Quý'], ['nam', 'Năm'], ['tuy', 'Tuỳ chọn'], ['all', 'Tất cả']];
+  function period(f) {
+    const a = new Date((f.d || U.todayISO()) + 'T00:00:00'), y = a.getFullYear(), m = a.getMonth();
+    if (f.mode === 'ngay') return [iso(a), iso(a), 'Ngày ' + U.fmtDate(iso(a))];
+    if (f.mode === 'thang') return [iso(new Date(y, m, 1)), iso(new Date(y, m + 1, 0)), 'Tháng ' + (m + 1) + '/' + y];
+    if (f.mode === 'quy') { const q = Math.floor(m / 3); return [iso(new Date(y, q * 3, 1)), iso(new Date(y, q * 3 + 3, 0)), 'Quý ' + (q + 1) + '/' + y]; }
+    if (f.mode === 'nam') return [y + '-01-01', y + '-12-31', 'Năm ' + y];
+    if (f.mode === 'tuy') return [f.from0 || '', f.to0 || '', (f.from0 ? U.fmtDate(f.from0) : '…') + ' – ' + (f.to0 ? U.fmtDate(f.to0) : '…')];
     return ['', '', 'Toàn bộ thời gian'];
   }
-  const PRESETS = [['thang', 'Tháng này'], ['prev', 'Tháng trước'], ['quy', 'Quý này'], ['quytruoc', 'Quý trước'], ['nam', 'Năm nay'], ['namtruoc', 'Năm trước'], ['all', 'Tất cả'], ['tuy', 'Tuỳ chọn']];
   function filt() {
-    const f = App.dcF || (App.dcF = { p: 'thang', from: '', to: '', who: '', tab: 'tong', onlyMiss: true, type: '', st: '' });
-    if (f.p !== 'tuy') { const r = range(f.p); f.from = r[0]; f.to = r[1]; f.label = r[2]; }
-    else f.label = (f.from ? U.fmtDate(f.from) : '…') + ' – ' + (f.to ? U.fmtDate(f.to) : '…');
+    const f = App.dcF || (App.dcF = { mode: 'thang', d: U.todayISO(), from0: '', to0: '', who: '', type: '', st: '', quick: 'all', q: '', tab: 'phieu', onlyMiss: true });
+    if (!f.mode) { f.mode = 'thang'; f.d = U.todayISO(); f.quick = 'all'; f.tab = 'phieu'; }
+    const r = period(f); f.from = r[0]; f.to = r[1]; f.label = r[2]; f.st = '';
     return f;
+  }
+  function shift(f, dir) {
+    const a = new Date(f.d + 'T00:00:00');
+    if (f.mode === 'ngay') a.setDate(a.getDate() + dir);
+    else if (f.mode === 'thang') a.setMonth(a.getMonth() + dir, 1);
+    else if (f.mode === 'quy') a.setMonth(a.getMonth() + 3 * dir, 1);
+    else if (f.mode === 'nam') a.setFullYear(a.getFullYear() + dir, 0, 1);
+    f.d = iso(a);
   }
   const inR = (f, d) => { const x = String(d || '').slice(0, 10); if (!x) return !f.from && !f.to; return (!f.from || x >= f.from) && (!f.to || x <= f.to); };
 
@@ -75,11 +83,60 @@
     return { a, tus, hus, tts, lines, ledger, docsP, E, k, people: Object.values(people).sort((x, y) => String(x.name).localeCompare(String(y.name))), f, dc: Dc };
   }
 
+  /* ---------------- dòng đối chiếu cho từng phiếu ---------------- */
+  function rowsOf(R) {
+    const Fl = F(), Dc = D(), a = R.a, M = (l, k) => { const m = {}; l.forEach((x) => { m[x.o + '|' + x[k].id] = x; }); return m; };
+    const tuM = M(a.tus, 'tu'), huM = M(a.hus, 'hu'), ttM = M(a.tts, 't');
+    return R.docsP.map((d) => {
+      const o = d._owner, s = Fl.status(d, o), r = Fl.reviewOf(d, o) || {}, key = o + '|' + d.id;
+      const row = { d, o, s, r, done: Fl.isDone(d, o), total: Dc.total(d), codes: { tu: '', hu: '', tt: '' }, adv: '', spent: '', diff: '', xl: '', set: null };
+      if (d.type === 'HU') {
+        const x = huM[key] || {};
+        row.pay = ['da-duyet', 'da-chi'].includes(s) ? { t: 'Đã quyết toán', cls: 'ok' } : { t: 'Chưa quyết toán', cls: 'out' };
+        row.codes = { tu: x.tu ? x.tu.soPhieu : (d.tuSoPhieu || ''), hu: d.soPhieu, tt: x.tt ? x.tt.soPhieu : '' };
+        Object.assign(row, { adv: x.adv, spent: x.spent, diff: x.diff, xl: x.label || '', set: x.k ? { t: x.label, cls: x.cls, k: x.k } : null });
+      } else {
+        const pd = r.paid || {};
+        row.pay = s === 'da-chi' ? { t: 'Đã chi', cls: 'ok', at: pd.at, ref: pd.ref } : s === 'da-duyet' ? { t: 'Chưa chi', cls: 'warn' } : { t: '—', cls: 'out' };
+        if (d.type === 'TU') {
+          const x = tuM[key] || {};
+          row.codes = { tu: d.soPhieu, hu: x.hu ? x.hu.soPhieu : '', tt: x.tt ? x.tt.soPhieu : '' };
+          Object.assign(row, { adv: x.adv, spent: x.hu ? x.spent : '', diff: x.hu ? x.diff : '', xl: s === 'da-chi' ? x.label : '', set: s === 'da-chi' && x.k ? { t: x.label, cls: x.cls, k: x.k } : null });
+        } else {
+          const x = ttM[key] || {};
+          row.codes = { tu: x.tuSo || '', hu: x.hu ? x.hu.soPhieu : '', tt: d.soPhieu };
+          row.xl = x.hu ? 'Bù chi vượt tạm ứng' : 'Độc lập (ngoài tạm ứng)';
+        }
+      }
+      row.miss = d.type === 'TU' ? 0 : Dc.filledItems(d).filter((it) => !['vat', 'bill'].includes(Fl.hdOf(it))).length;
+      return row;
+    });
+  }
+  const LECH = ['refund-due', 'refund-wait', 'topup-due', 'topup-pending'];
+  const QUICK = [
+    ['all', 'Tất cả phiếu', 'grid', 'primary', (x) => x.s !== 'nhap'],
+    ['cho', 'Chờ duyệt', 'clock', 'primary', (x) => x.s === 'cho-duyet' || x.s === 'can-bo-sung'],
+    ['chuachi', 'Đã duyệt – chưa chi', 'lock', 'warn', (x) => x.d.type !== 'HU' && x.s === 'da-duyet'],
+    ['dachi', 'Đã chi / quyết toán', 'check', 'ok', (x) => (x.d.type !== 'HU' && x.s === 'da-chi') || (x.d.type === 'HU' && ['da-duyet', 'da-chi'].includes(x.s))],
+    ['open', 'Tạm ứng chưa hoàn ứng', 'wallet', 'danger', (x) => !!(x.set && x.set.k === 'open')],
+    ['lech', 'Chênh lệch chưa xử lý', 'calc', 'accent', (x) => x.d.type === 'HU' && !!(x.set && LECH.includes(x.set.k))],
+    ['hd', 'Thiếu hoá đơn', 'receipt', 'warn', (x) => x.miss > 0 && x.s !== 'nhap'],
+    ['xong', 'Đã hoàn tất', 'flag', 'ok', (x) => x.done],
+    ['tuchoi', 'Từ chối', 'x', 'danger', (x) => x.s === 'tu-choi'],
+    ['nhap', 'Nháp', 'edit', 'out', (x) => x.s === 'nhap'],
+  ];
+  function viewRows(R) {
+    const f = R.f, q = QUICK.find((x) => x[0] === f.quick) || QUICK[0], k = U.normText(f.q || '');
+    return rowsOf(R).filter(q[4]).filter((x) => !k || U.normText([x.d.soPhieu, x.r.soSo, x.d._ownerName, x.d.noiDung, x.codes.tu, x.codes.hu, x.codes.tt, U.groupThousand(x.total), (x.r.paid || {}).ref].join(' ')).indexOf(k) >= 0)
+      .sort((a, b) => String(b.d.ngayLap || '').localeCompare(String(a.d.ngayLap || '')));
+  }
+
   /* ---------------- màn hình ---------------- */
   App.screens['doi-chieu'] = async function (root, route) {
     const f = filt();
-    if (route.q.tab) f.tab = route.q.tab;
-    if (route.q.p) { f.p = route.q.p; filt(); }
+    if (route.q.tab) f.tab = ({ tong: 'tu', loai: 'phieu', hu: 'tu', tt: 'phieu', nguoi: 'phieu' })[route.q.tab] || route.q.tab;
+    if (route.q.p) { if (route.q.p === 'all') f.mode = 'all'; else if (route.q.p === 'prev') { f.mode = 'thang'; const a = new Date(); a.setMonth(a.getMonth() - 1, 1); f.d = iso(a); } filt(); }
+    if (route.q.tab === 'hd') f.quick = 'hd';
     if (route.q.tab || route.q.p) history.replaceState(null, '', '#/doi-chieu');
     const acc = F().isAcc();
     root.innerHTML = App.pageHead('Đối chiếu & sổ theo dõi', acc ? 'Toàn công ty' : 'Chứng từ của bạn') + '<div class="card"><div class="card-b"><div class="skel"></div><div class="skel mt12" style="width:60%"></div></div></div>';
@@ -88,29 +145,80 @@
     App._dcScope = scope;
     draw(root, scope);
   };
+  function pickerHTML(f, scope) {
+    const a = new Date(f.d + 'T00:00:00'), y = a.getFullYear();
+    const ys = scope.docs.map((d) => +String(d.ngayLap || '').slice(0, 4)).filter(Boolean);
+    const y0 = Math.min(y, new Date().getFullYear(), ...ys), y1 = Math.max(y, new Date().getFullYear(), ...ys);
+    const ysel = '<select class="select" id="dc-y" aria-label="Năm">' + Array.from({ length: y1 - y0 + 1 }, (_, i) => y1 - i).map((v) => '<option' + (v === y ? ' selected' : '') + '>' + v + '</option>').join('') + '</select>';
+    let inp = '';
+    if (f.mode === 'ngay') inp = '<input class="input" type="date" id="dc-d" value="' + esc(f.d) + '" aria-label="Ngày">';
+    else if (f.mode === 'thang') inp = '<input class="input" type="month" id="dc-mo" value="' + esc(f.d.slice(0, 7)) + '" aria-label="Tháng">';
+    else if (f.mode === 'quy') inp = '<select class="select" id="dc-q" aria-label="Quý">' + [1, 2, 3, 4].map((q) => '<option value="' + q + '"' + (Math.floor(a.getMonth() / 3) + 1 === q ? ' selected' : '') + '>Quý ' + q + '</option>').join('') + '</select>' + ysel;
+    else if (f.mode === 'nam') inp = ysel;
+    else if (f.mode === 'tuy') inp = '<input class="input" type="date" id="dc-from" value="' + esc(f.from0 || '') + '" aria-label="Từ ngày"><span class="muted">→</span><input class="input" type="date" id="dc-to" value="' + esc(f.to0 || '') + '" aria-label="Đến ngày">';
+    const nav = ['ngay', 'thang', 'quy', 'nam'].includes(f.mode);
+    return '<div class="dc-period"><div class="seg">' + MODES.map((m) => '<button class="' + (f.mode === m[0] ? 'on' : '') + '" data-act="dcMode:' + m[0] + '">' + m[1] + '</button>').join('') + '</div>' +
+      '<div class="dc-pick">' + (nav ? '<button class="btn out icon" data-act="dcShift:-1" aria-label="Kỳ trước">' + I('left') + '</button>' : '') + inp +
+      (nav ? '<button class="btn out icon" data-act="dcShift:1" aria-label="Kỳ sau">' + I('right') + '</button><button class="btn ghost sm" data-act="dcNow">Hiện tại</button>' : '') + '</div></div>';
+  }
   function draw(root, scope) {
-    const f = filt(), acc = F().isAcc(), R = compute(scope, f), E = R.E, k = R.k, Fl = F();
+    const f = filt(), acc = F().isAcc(), R = compute(scope, f);
     App._dcR = R;
     const people = Array.from(new Map(scope.docs.map((d) => [d._owner, d._ownerName])).entries());
-    const tabs = [['tong', 'Tổng quan', 'grid'], ['loai', 'Theo loại phiếu', 'file'], ['tu', 'Theo dõi tạm ứng', 'wallet'], ['hu', 'Hoàn ứng', 'restore'], ['so', 'Sổ giao dịch', 'book'], ['tt', 'Thanh toán (DNTT)', 'calc'], ['hd', 'Hoá đơn', 'receipt']].concat(acc ? [['nguoi', 'Theo nhân sự', 'users']] : []);
-    const body = { tong: tongHTML, loai: loaiHTML, tu: tuHTML, hu: huHTML, so: soHTML, tt: ttHTML, hd: hdHTML, nguoi: nguoiHTML }[f.tab] || tongHTML;
-    root.innerHTML = App.pageHead('Đối chiếu & sổ theo dõi', (acc ? 'Toàn công ty' : 'Chứng từ của bạn') + ' · kỳ <b>' + esc(f.label) + '</b>' + (f.who ? ' · ' + esc((people.find((p) => p[0] === f.who) || [])[1] || '') : ''),
-      '<button class="btn accent" data-act="dcExcel">' + I('excel') + 'Excel</button><button class="btn out" data-act="dcWord">' + I('word') + 'Word</button>' +
-      '<button class="btn out" data-act="dcPdf">' + I('pdf') + 'PDF</button><button class="btn out" data-act="dcShare">' + I('share') + 'Gửi Zalo</button>') +
-      '<div class="card"><div class="card-b" style="padding-bottom:14px"><div class="row" style="gap:8px;flex-wrap:wrap"><div class="seg scroll">' +
-      PRESETS.map((p) => '<button class="' + (f.p === p[0] ? 'on' : '') + '" data-act="dcP:' + p[0] + '">' + p[1] + '</button>').join('') + '</div>' +
-      (f.p === 'tuy' ? '<input class="input" type="date" id="dc-from" value="' + esc(f.from) + '" style="width:160px" aria-label="Từ ngày"><input class="input" type="date" id="dc-to" value="' + esc(f.to) + '" style="width:160px" aria-label="Đến ngày">' : '') +
-      '<span class="spacer"></span>' + App.selectBare('dc-type', f.type, [{ v: '', t: 'Mọi loại phiếu' }, { v: 'TU', t: 'Tạm ứng' }, { v: 'HU', t: 'Hoàn ứng' }, { v: 'TT', t: 'Thanh toán (DNTT)' }]) +
-      App.selectBare('dc-st', f.st, [{ v: '', t: 'Mọi trạng thái' }].concat(Fl.ST_ORDER.map((v) => ({ v, t: Fl.ST[v].t }))).concat([{ v: 'xong', t: 'Đã hoàn tất hồ sơ' }])) +
-      (acc ? App.selectBare('dc-who', f.who, [{ v: '', t: 'Mọi nhân sự' }].concat(people.map((p) => ({ v: p[0], t: p[1] })))) : '') +
-      '</div></div></div>' +
+    const tabs = [['phieu', 'Danh sách phiếu', 'list'], ['tu', 'Tạm ứng ↔ Hoàn ứng', 'wallet'], ['so', 'Sổ giao dịch', 'book'], ['hd', 'Hoá đơn', 'receipt']];
+    const body = { phieu: phieuHTML, tu: tuTabHTML, so: soHTML, hd: hdHTML }[f.tab] || phieuHTML;
+    root.innerHTML = App.pageHead('Đối chiếu & sổ theo dõi', 'Kỳ <b>' + esc(f.label) + '</b>' + (f.who ? ' · ' + esc((people.find((p) => p[0] === f.who) || [])[1] || '') : '') + (f.type ? ' · ' + esc(D().TYPES[f.type].label) : ''),
+      '<button class="btn accent" data-act="dcExcel">' + I('excel') + 'Xuất Excel</button><button class="btn out" data-act="dcPdf">' + I('pdf') + 'PDF</button>' +
+      '<button class="btn out" data-act="dcWord">' + I('word') + 'Word</button><button class="btn out" data-act="dcShare">' + I('share') + 'Gửi Zalo</button>') +
+      '<div class="card dc-bar"><div class="card-b">' + pickerHTML(f, scope) +
+      '<div class="dc-filters">' + App.selectBare('dc-type', f.type, [{ v: '', t: 'Mọi loại phiếu' }, { v: 'TU', t: 'Tạm ứng (DNTU)' }, { v: 'HU', t: 'Hoàn ứng (DNHU)' }, { v: 'TT', t: 'Thanh toán (DNTT)' }]) +
+      (acc ? App.selectBare('dc-who', f.who, [{ v: '', t: 'Mọi nhân sự' }].concat(people.map((p) => ({ v: p[0], t: p[1] })))) : '') + '</div></div></div>' +
       '<div class="tabs-line mt16">' + tabs.map((t) => '<button class="' + (f.tab === t[0] ? 'on' : '') + '" data-act="dcTab:' + t[0] + '">' + I(t[2], 15) + t[1] + '</button>').join('') + '</div>' +
       '<div class="mt16">' + body(R) + '</div>';
-    const w = document.getElementById('dc-who'); if (w) w.onchange = () => { f.who = w.value; draw(root, scope); };
-    [['dc-type', 'type'], ['dc-st', 'st']].forEach(([id, k]) => { const el = document.getElementById(id); if (el) el.onchange = () => { f[k] = el.value; draw(root, scope); }; });
-    ['dc-from', 'dc-to'].forEach((id) => { const el = document.getElementById(id); if (el) el.onchange = () => { f[id === 'dc-from' ? 'from' : 'to'] = el.value; draw(root, scope); }; });
+    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onchange = () => { fn(el.value); draw(root, scope); }; };
+    on('dc-who', (v) => { f.who = v; }); on('dc-type', (v) => { f.type = v; });
+    on('dc-d', (v) => { if (v) f.d = v; }); on('dc-mo', (v) => { if (v) f.d = v + '-01'; });
+    on('dc-q', (v) => { const y = +App.val('dc-y'); f.d = iso(new Date(y, (+v - 1) * 3, 1)); });
+    on('dc-y', (v) => { const q = document.getElementById('dc-q'); f.d = iso(new Date(+v, q ? (+q.value - 1) * 3 : 0, 1)); });
+    on('dc-from', (v) => { f.from0 = v; }); on('dc-to', (v) => { f.to0 = v; });
     const om = document.getElementById('hd-only'); if (om) om.onchange = () => { f.onlyMiss = om.checked; draw(root, scope); };
-    void E; void k; void Fl;
+    const qi = document.getElementById('dc-q2');
+    if (qi) qi.oninput = () => { f.q = qi.value; const b = document.getElementById('dc-list'); if (b) b.innerHTML = listHTML(R); };
+  }
+  function phieuHTML(R) {
+    const all = rowsOf(R), f = R.f;
+    const cards = QUICK.filter((q) => q[0] !== 'nhap' || all.some(q[4])).map((q) => {
+      const l = all.filter(q[4]);
+      return '<button class="dc-q ' + q[3] + (f.quick === q[0] ? ' on' : '') + '" data-act="dcQuick:' + q[0] + '"><span class="dc-qi">' + I(q[2], 16) + '</span><span class="dc-qb"><small>' + q[1] + '</small><b>' + l.length + '</b><i>' + money(l.reduce((a, x) => a + x.total, 0)) + '</i></span></button>';
+    }).join('');
+    return '<div class="dc-qs">' + cards + '</div>' +
+      '<div class="card mt16"><div class="card-h" style="flex-wrap:wrap;gap:10px"><div class="t">' + I('list') + esc((QUICK.find((q) => q[0] === f.quick) || QUICK[0])[1]) + '</div>' +
+      '<div class="search field mb0" style="flex:1;max-width:380px;margin-left:auto">' + I('search') + '<input class="input" id="dc-q2" type="search" placeholder="Tìm mã phiếu, số sổ, mã GD, người, số tiền…" value="' + esc(f.q || '') + '"></div></div>' +
+      '<div class="card-b flush" id="dc-list">' + listHTML(R) + '</div></div>';
+  }
+  function listHTML(R) {
+    const l = viewRows(R), T = D().TYPES, Fl = F();
+    if (!l.length) return App.emptyState('search', 'Không có phiếu phù hợp', 'Thử đổi kỳ, ô lọc hoặc từ khoá.');
+    const href = (x) => (Fl.isAcc() ? '#/duyet/' + esc(x.o) + '/' + esc(x.d.id) : '#/phieu/' + esc(x.d.id));
+    const code = (t, v) => v ? '<span class="dc-code">' + t + ' <b>' + esc(v) + '</b></span>' : '';
+    return '<div class="tbl-wrap"><table class="tbl cards dc-tbl"><thead><tr><th>Ngày lập</th><th>Mã phiếu</th><th>Người đề nghị</th><th>Nội dung</th><th class="num">Số tiền</th><th>Duyệt</th><th>Chi tiền</th><th>Liên quan · đối chiếu</th></tr></thead><tbody>' +
+      l.map((x) => '<tr class="click" data-href="' + href(x) + '"><td data-l="Ngày lập" class="nowrap">' + esc(U.fmtDate(x.d.ngayLap)) + '</td>' +
+        '<td data-l="Mã phiếu"><span class="tchip t-' + x.d.type + '">' + T[x.d.type].prefix + '</span> <b class="mono">' + esc(x.d.soPhieu) + '</b>' + (x.r.soSo ? '<span class="sub mono">Sổ ' + esc(x.r.soSo) + '</span>' : '') + '</td>' +
+        '<td data-l="Người"><b>' + esc(x.d._ownerName) + '</b><span class="sub">' + esc(x.d._dept || '') + '</span></td>' +
+        '<td data-l="Nội dung" style="min-width:200px">' + esc(x.d.noiDung || '') + (x.miss ? '<span class="sub warn-t">' + x.miss + ' dòng thiếu HĐ</span>' : '') + '</td>' +
+        '<td class="num b" data-l="Số tiền">' + money(x.total) + '</td>' +
+        '<td data-l="Duyệt">' + Fl.badge(x.d, x.o, true) + (x.done ? ' ' + B('ok', 'Hoàn tất') : '') + '</td>' +
+        '<td data-l="Chi tiền">' + B(x.pay.cls, x.pay.t) + (x.pay.at ? '<span class="sub">' + esc(U.fmtDate(x.pay.at)) + (x.pay.ref ? ' · <span class="mono">' + esc(x.pay.ref) + '</span>' : '') + '</span>' : '') + '</td>' +
+        '<td data-l="Liên quan">' + (x.d.type !== 'TU' || x.codes.hu ? '<div class="dc-codes">' + (x.d.type !== 'TU' ? code('TU', x.codes.tu) : '') + (x.d.type !== 'HU' ? code('HU', x.codes.hu) : '') + (x.d.type !== 'TT' ? code('Bù', x.codes.tt) : '') + '</div>' : '') +
+        (x.set ? B(x.set.cls || 'out', x.set.t) : x.xl ? '<span class="sub">' + esc(x.xl) + '</span>' : '') + '</td></tr>').join('') +
+      '</tbody><tfoot><tr><td colspan="4">Cộng ' + l.length + ' phiếu</td><td class="num">' + money(l.reduce((a, x) => a + x.total, 0)) + '</td><td colspan="3"></td></tr></tfoot></table></div>';
+  }
+  function tuTabHTML(R) {
+    const E = R.E;
+    const eq = (l, v, cls) => '<div class="eq-it ' + (cls || '') + '"><small>' + l + '</small><b>' + money(v) + '</b></div>';
+    return '<div class="card"><div class="card-h"><div class="t">' + I('calc') + 'Đối chiếu tạm ứng · ' + esc(R.f.label) + '</div>' + (E.ok ? B('ok', '✓ Khớp') : B('danger', 'Lệch ' + money(E.A - E.right))) + '</div><div class="card-b">' +
+      '<div class="eq">' + eq('Tạm ứng đã chi', E.A, 'big') + '<span class="eq-op">=</span>' + eq('Thực chi quyết toán', E.S) + '<span class="eq-op">−</span>' + eq('Chi vượt (bù)', E.Over, 'warn') +
+      '<span class="eq-op">+</span>' + eq('Đã nộp lại', E.Rok, 'ok') + '<span class="eq-op">+</span>' + eq('Chờ nộp lại', E.Rwait + E.Rdue, 'warn') + '<span class="eq-op">+</span>' + eq('Chưa hoàn ứng', E.O, 'danger') + '</div></div></div>' + tuHTML(R);
   }
   const docLink = (d) => {
     const acc = F().isAcc();
@@ -249,7 +357,7 @@
     const acc = F().isAcc(), s = App.settings;
     return { settings: s, filter: { from: R.f.from, to: R.f.to }, owner: { name: acc ? (F().myName() + ' (' + F().ROLES[F().role()].t + ')') : (s.hoTen || ''), dept: acc ? 'Toàn công ty' : (s.boPhan || '') } };
   }
-  const fileBase = (R) => U.safeName('Doi-chieu-tam-ung - ' + R.f.label + ' - ' + U.todayISO());
+  const fileBase = (R) => U.safeName('Doi-chieu - ' + R.f.label + ' - ' + U.todayISO());
 
   async function excel(R, blobOnly) {
     const ExcelJS = await App.ensureLib('exceljs'), X = App.Report.xl, Dc = D();
@@ -263,6 +371,32 @@
       let row = X.brandHeader(ws, r, title, widths.length, logoId);
       X.tableHead(ws, row, heads); return { ws, row: row + 1, hr: row };
     };
+    // 0) BẢNG ĐỐI CHIẾU THEO CỘT — đúng bộ lọc đang xem, đủ mã phiếu / mã liên quan / mã giao dịch
+    {
+      const Fl = F(), rows = viewRows(R);
+      const H = ['STT', 'Ngày lập', 'Loại', 'Mã phiếu', 'Số vào sổ', 'Người đề nghị', 'Bộ phận', 'Nội dung', 'Số tiền', 'Trạng thái duyệt', 'Ngày duyệt', 'Người duyệt',
+        'Chi tiền', 'Ngày chi', 'Mã giao dịch', 'Mã tạm ứng (DNTU)', 'Mã hoàn ứng (DNHU)', 'Mã DNTT bù', 'Đã tạm ứng', 'Thực chi', 'Chênh lệch (+thừa / −thiếu)', 'Xử lý / đối chiếu', 'Dòng thiếu HĐ', 'Hoàn tất'];
+      const W = [5, 11, 7, 17, 13, 20, 16, 34, 13, 15, 11, 18, 13, 11, 19, 17, 17, 17, 13, 13, 14, 30, 9, 10];
+      const { ws, hr } = sheet('Đối chiếu', '6B3DBE', W, 'BẢNG ĐỐI CHIẾU CHỨNG TỪ · ' + R.f.label.toUpperCase() + ((QUICK.find((q) => q[0] === R.f.quick) || [])[0] !== 'all' ? ' · ' + (QUICK.find((q) => q[0] === R.f.quick) || [])[1].toUpperCase() : ''), H);
+      let row = hr + 1;
+      rows.forEach((x, i) => {
+        const d = x.d, rv = x.r, st = Fl.ST[x.s], decided = rv.at && Fl.ST[rv.status];
+        X.tableRow(ws, row, [i + 1, App.Export._isoToDate(d.ngayLap), Dc.TYPES[d.type].prefix, d.soPhieu, rv.soSo || '', d._ownerName, d._dept || d.boPhan || '', d.noiDung || '', x.total,
+          st.s, decided ? App.Export._isoToDate(rv.at.slice(0, 10)) : '', decided ? rv.byName || '' : '',
+          x.pay.t === '—' ? '' : x.pay.t, x.pay.at ? App.Export._isoToDate(x.pay.at) : '', x.pay.ref || '',
+          x.codes.tu, x.codes.hu, x.codes.tt, x.adv === '' || x.adv == null ? '' : x.adv, x.spent === '' || x.spent == null ? '' : x.spent, x.diff === '' || x.diff == null ? '' : x.diff,
+          x.xl || '', x.miss || '', x.done ? 'Đã hoàn tất' : ''],
+          ['c', 'd', 'c', '', '', '', '', '', 'n', '', 'd', '', '', 'd', '', '', '', '', 'n', 'n', 'n', '', 'c', 'c'], i % 2);
+        stCell(ws, row, 10, st.cls, st.s);
+        if (x.pay.t !== '—') stCell(ws, row, 13, x.pay.cls, x.pay.t);
+        if (x.set) stCell(ws, row, 22, x.set.cls, x.set.t);
+        row++;
+      });
+      X.totalRow(ws, row, H.length, 'CỘNG ' + rows.length + ' PHIẾU', rows.length ? { 9: { formula: 'SUM(I' + (hr + 1) + ':I' + (row - 1) + ')', result: 0 } } : {});
+      ws.autoFilter = { from: { row: hr, column: 1 }, to: { row: Math.max(hr, row - 1), column: H.length } };
+      ws.views = [{ state: 'frozen', ySplit: hr, xSplit: 4, showGridLines: false }];
+      X.pageSetup(ws, row, H.length, true);
+    }
     // 1) Tổng hợp
     {
       const ws = wb.addWorksheet('Tổng hợp', { properties: { tabColor: { argb: 'FF6B3DBE' } } });
@@ -488,7 +622,10 @@
   App.Ledger = { compute, printHTML, excel, word, pdf };
 
   Object.assign(App.actions, {
-    dcP(p) { const f = filt(); f.p = p; if (p === 'tuy' && !f.from) { const r = range('thang'); f.from = r[0]; f.to = r[1]; } draw(document.getElementById('screen'), App._dcScope); },
+    dcMode(m) { const f = filt(); f.mode = m; if (m === 'tuy' && !f.from0) { const r = period(Object.assign({}, f, { mode: 'thang' })); f.from0 = r[0]; f.to0 = r[1]; } draw(document.getElementById('screen'), App._dcScope); },
+    dcShift(n) { const f = filt(); shift(f, +n); draw(document.getElementById('screen'), App._dcScope); },
+    dcNow() { filt().d = U.todayISO(); draw(document.getElementById('screen'), App._dcScope); },
+    dcQuick(q) { const f = filt(); f.quick = q; f.tab = 'phieu'; draw(document.getElementById('screen'), App._dcScope); },
     dcTab(t) { filt().tab = t; draw(document.getElementById('screen'), App._dcScope); },
     async dcRemind(arg) {
       const [o, id] = arg.split('|'); const d = (App._dcScope.docs || []).find((x) => x._owner === o && x.id === id); if (!d) return;

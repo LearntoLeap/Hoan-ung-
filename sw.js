@@ -5,7 +5,7 @@
    - Thư viện / ảnh: dùng bản đã lưu (đổi VERSION khi thay thư viện).
    Đổi VERSION ở mỗi lần phát hành để xoá cache cũ. */
 'use strict';
-const VERSION = 'ltl-v30';
+const VERSION = 'ltl-v31';
 const CORE = 'ltl-core-' + VERSION;
 
 const SHELL = [
