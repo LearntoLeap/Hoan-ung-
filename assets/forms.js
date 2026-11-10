@@ -350,7 +350,7 @@
     dirty = !!draft._new || JSON.stringify(stripDraft(draft)) !== original;
     renderEditor(root);
   };
-  function stripDraft(d) { const c = Object.assign({}, d); delete c._new; return c; }
+  function stripDraft(d) { const c = Object.assign({}, d); delete c._new; delete c._evName; return c; }
 
   function prefillFromTU(d, tuId) {
     const tu = App.data.docs.find((x) => x.id === tuId); if (!tu) return;
@@ -404,7 +404,7 @@
         '<td data-l="Số lượng" style="width:70px"><input class="input" data-f="soLuong" inputmode="decimal" value="' + esc(it.soLuong) + '" placeholder="SL" style="text-align:center"></td>' +
         '<td data-l="Đơn giá" style="width:130px"><input class="input money" data-f="donGia" inputmode="numeric" data-money value="' + (U.toNumber(it.donGia) ? U.groupThousand(it.donGia) : '') + '" placeholder="0"></td>' +
         '<td class="tt" data-l="Thành tiền" data-tt="' + i + '">' + (Docs.lineTotal(it) ? U.groupThousand(Docs.lineTotal(it)) : '') + '</td>' +
-        '<td data-l="Hoá đơn" style="min-width:150px">' + hdSel(it) + (c.hd ? '<span class="sub ok-t">' + I('check', 11) + ' KT đã nhận HĐ</span>' : '') + '</td>' +
+        (needEv ? '<td data-l="Hoá đơn" style="min-width:150px">' + hdSel(it) + (c.hd ? '<span class="sub ok-t">' + I('check', 11) + ' KT đã nhận HĐ</span>' : '') + '</td>' : '') +
         '<td class="wide" data-l="Ghi chú" style="min-width:140px"><input class="input" data-f="ghiChu" value="' + esc(it.ghiChu) + '" placeholder="Số HĐ, ghi chú…"></td>' +
         '<td data-l="Chứng từ" style="width:74px"><a href="#" class="btn ' + (n ? 'sec' : needEv ? 'out warn-b' : 'out') + ' xs ev-btn" data-act="itemEv:' + i + '" title="Ảnh minh chứng / chứng từ của dòng này">' + I('camera', 14) + (n || (ro ? '0' : '+')) + '</a></td>' +
         '<td class="del" style="width:36px;padding-top:8px">' + (ro ? '' : '<button class="btn ghost icon xs" data-act="itemDel:' + i + '" title="Xoá dòng" aria-label="Xoá dòng">' + I('trash') + '</button>') + '</td></tr>';
@@ -417,9 +417,9 @@
     const who = r.byName ? ' · ' + esc(r.byName) + ' lúc ' + esc(U.fmtDateTime(r.at)) : '';
     let body = '', cls = 'info', ic = info.ic;
     if (s === 'nhap') body = '<b>Phiếu nháp — chưa gửi kế toán.</b> Kiểm tra bảng kê' + (d.type !== 'TU' ? ', chụp chứng từ từng dòng và chọn tình trạng hoá đơn' : '') + ' rồi bấm <b>Gửi duyệt</b>.';
-    else if (s === 'cho-duyet') { body = '<b>Đã gửi — đang chờ kế toán duyệt</b> (lần ' + (d.round || 1) + ', ' + esc(U.fmtDateTime(d.submittedAt)) + '). Muốn sửa: bấm <b>Rút lại</b>.'; cls = 'info'; }
+    else if (s === 'cho-duyet') { const days = d.submittedAt ? Math.floor((Date.now() - Date.parse(d.submittedAt)) / 864e5) : 0; body = '<b>Đã gửi — đang chờ kế toán duyệt</b> (lần ' + (d.round || 1) + ', ' + esc(U.fmtDateTime(d.submittedAt)) + (days ? ', đã ' + days + ' ngày' : '') + '). Muốn sửa: bấm <b>Rút lại</b>.<div class="mt8"><button class="btn sm out" data-act="docNudge">' + I('bell') + 'Nhắc kế toán</button></div>'; cls = days >= 3 ? 'warn' : 'info'; }
     else if (s === 'can-bo-sung') { body = '<b>Kế toán yêu cầu xem xét lại / bổ sung</b>' + who + (r.note ? '<div class="mt8 note-q">“' + esc(r.note) + '”</div>' : '') + '<div class="mt8">Sửa phiếu, bổ sung chứng từ / giải trình trong mục Trao đổi, rồi bấm <b>Gửi lại</b>.</div>'; cls = 'warn'; }
-    else if (s === 'da-duyet') { body = '<b>Kế toán đã duyệt</b>' + who + (r.soSo ? ' · Số vào sổ <b class="mono">' + esc(r.soSo) + '</b>' : '') + '. Phiếu đã <b>khoá</b> — không sửa, không xoá, không bổ sung.' + (r.note ? '<div class="mt8 note-q">“' + esc(r.note) + '”</div>' : ''); cls = 'ok'; }
+    else if (s === 'da-duyet') { body = '<b>Kế toán đã duyệt</b>' + who + (r.soSo ? ' · Số vào sổ <b class="mono">' + esc(r.soSo) + '</b>' : '') + '. Phiếu đã <b>khoá</b> — không sửa, không xoá, không bổ sung.' + (r.note ? '<div class="mt8 note-q">“' + esc(r.note) + '”</div>' : '') + (d.type !== 'HU' ? '<div class="mt8">Chờ kế toán lên lệnh chi. <button class="btn sm out" data-act="docNudge">' + I('bell') + 'Nhắc kế toán</button></div>' : ''); cls = 'ok'; }
     else if (s === 'da-chi') { const pd = r.paid || {}; body = '<b>Đã duyệt chi</b>' + who + (r.soSo ? ' · Số vào sổ <b class="mono">' + esc(r.soSo) + '</b>' : '') + (pd.at ? '<br>Ngày chi ' + esc(U.fmtDate(pd.at)) + ' · ' + money(pd.amount) + (pd.ref ? ' · Mã GD <span class="mono">' + esc(pd.ref) + '</span>' : '') : '') + '<br>Phiếu đã <b>khoá</b> — không sửa, không xoá, không bổ sung.'; cls = 'ok'; }
     else if (s === 'tu-choi') { body = '<b>Kế toán từ chối phiếu</b>' + who + (r.note ? '<div class="mt8 note-q">“' + esc(r.note) + '”</div>' : '') + '<div class="mt8">Có thể nhân bản để lập phiếu mới, hoặc chuyển phiếu này vào thùng rác.</div>'; cls = 'danger'; }
     return '<div class="alert ' + cls + ' st-banner">' + I(ic) + '<div style="flex:1">' + body + '</div>' + Fl.badge(d) + '</div>';
@@ -481,7 +481,7 @@
       ui.date('d-ngayLap', 'Ngày lập', d.ngayLap, { hint: 'Mặc định hôm nay. Đổi tháng → số phiếu tự nhảy theo tháng mới' }) +
       ui.text('d-nguoiDeNghi', 'Người đề nghị', d.nguoiDeNghi, { req: true }) +
       ui.text('d-boPhan', 'Bộ phận', d.boPhan, { list: 'dl-bophan', ph: 'Chọn hoặc gõ bộ phận' }) + ui.datalist('dl-bophan', boPhanOpts) +
-      '<div class="sall">' + ui.select('d-eventId', 'Sự kiện / đợt chi', d.eventId || '', evOpts) + '</div>' +
+      '<div class="sall">' + ui.eventPicker('d-event', 'Sự kiện / đợt chi', d.eventId) + '</div>' +
       '<div class="sall">' + ui.textarea('d-noiDung', 'Nội dung', d.noiDung, { rows: 2, req: true, ph: 'VD: Thanh toán phí vận chuyển' }) + '</div>' +
       '<div class="sall">' + ui.textarea('d-mucDich', 'Mục đích', d.mucDich, { rows: 2, ph: 'VD: Book xe chở sa bàn cho TH Bắc Hồng' }) + '</div>' +
       '</div>' + (huParent ? '<div class="alert info mt8">' + I('link') + '<div>DNTT bù chi vượt tạm ứng của phiếu hoàn ứng <a href="#/phieu/' + esc(huParent.id) + '"><b>' + esc(huParent.soPhieu) + '</b></a>.</div></div>' : '') + '</div></div>' +
@@ -497,7 +497,7 @@
       // ---- Bảng kê
       '<div class="card"><div class="card-h"><div class="t">' + I('list') + (d.type === 'HU' ? 'Bảng kê chi phí thực tế đã chi' : 'Bảng kê đề nghị chi') + '</div>' +
       (ro ? '' : '<div class="row"><button class="btn out sm" data-act="itemsFromExpenses">' + I('receipt') + 'Lấy từ khoản chi</button></div>') + '</div>' +
-      '<div class="card-b" style="padding-left:12px;padding-right:12px"><div class="tbl-wrap"><table class="tbl items"><thead><tr><th>#</th><th>Nội dung</th><th>Ngày chi</th><th>Người tham gia</th><th>SL</th><th>Đơn giá</th><th class="num">Thành tiền</th><th>Hoá đơn</th><th>Ghi chú</th><th>Chứng từ</th><th></th></tr></thead>' +
+      '<div class="card-b" style="padding-left:12px;padding-right:12px"><div class="tbl-wrap"><table class="tbl items"><thead><tr><th>#</th><th>Nội dung</th><th>Ngày chi</th><th>Người tham gia</th><th>SL</th><th>Đơn giá</th><th class="num">Thành tiền</th>' + (d.type !== 'TU' ? '<th>Hoá đơn</th>' : '') + '<th>Ghi chú</th><th>Chứng từ</th><th></th></tr></thead>' +
       '<tbody id="items-body">' + itemRowsHTML() + '</tbody></table></div>' +
       (ro ? '' : '<div class="row mt12" style="padding:0 8px"><button class="btn sec sm" data-act="itemAdd">' + I('plus') + 'Thêm dòng</button>' +
         '<span class="muted" style="font-size:12.5px">Khoản trọn gói: để trống SL, nhập số tiền vào Đơn giá.' + (d.type !== 'TU' ? ' Mỗi dòng cần ảnh chứng từ ' + I('camera', 12) + ' và tình trạng hoá đơn để kế toán đối chiếu.' : '') + '</span></div>') +
@@ -520,7 +520,7 @@
 
       // ---- Tệp đính kèm chung
       '<div class="card"><div class="card-h"><div class="t">' + I('link') + 'Tệp đính kèm chung (hợp đồng, bảng kê…)</div></div><div class="card-b">' +
-      (isNew ? '<p class="muted" style="margin:0;font-size:13px">Lưu phiếu trước, sau đó tải lên tệp.</p>' : App.renderAttachments(d.id, ro)) + '</div></div>' +
+      App.renderAttachments(d.id, ro, isNew) + '</div></div>' +
 
       (d.type === 'TU' && !isNew ? '<div class="alert ' + (settledBy ? 'ok' : 'info') + '">' + I(settledBy ? 'check' : 'info') + '<div>' +
         (settledBy ? 'Phiếu này đã được quyết toán bằng phiếu hoàn ứng <a href="#/phieu/' + settledBy.id + '"><b>' + esc(settledBy.soPhieu) + '</b></a> ' + Fl.badge(settledBy, null, true) + '.'
@@ -528,7 +528,7 @@
             '<div class="mt8"><a class="btn sm" href="#/phieu/moi/HU?from=' + d.id + '">' + I('wallet') + 'Lập phiếu hoàn ứng</a></div>'
             : 'Khi kế toán duyệt chi tạm ứng, lập <b>phiếu hoàn ứng</b> từ phiếu này để quyết toán.') + '</div></div>' : '') +
 
-      (isNew ? '' : Fl.threadCard(Fl.myId(), d)) +
+      (isNew ? '' : '<div id="proof-box"></div>' + Fl.threadCard(Fl.myId(), d)) +
       '</div>' +
 
       // ---- Xem trước
@@ -562,6 +562,10 @@
       }
     }
     if (t && t.id === 'd-soPhieu') { const sEl = document.getElementById('d-stt'); if (sEl) sEl.value = Docs.sttOf(t.value); }
+    if (t && t.id === 'd-event' && e.type === 'change' && draft.type !== 'TU') {
+      const ex = App.findEventByName(t.value);
+      if (ex && !Docs.filledItems(collect()).length && App.expensesOf(ex.id).length) { draft.eventId = ex.id; importExpenses(draft, ex.id, true); rerenderItems(); App.toast('Đã lấy ' + Docs.filledItems(draft).length + ' khoản chi của đợt này vào bảng kê', 'ok'); }
+    }
     collect();
     const tr = t.closest && t.closest('tr[data-i]');
     if (tr) {
@@ -601,7 +605,7 @@
     const v = App.val;
     draft.soPhieu = v('d-soPhieu'); draft.ngayLap = v('d-ngayLap');
     draft.nguoiDeNghi = v('d-nguoiDeNghi'); draft.boPhan = v('d-boPhan');
-    draft.eventId = v('d-eventId') || null;
+    { const en = v('d-event'), ex = App.findEventByName(en); draft.eventId = ex ? ex.id : null; draft._evName = ex ? '' : en; }
     draft.noiDung = v('d-noiDung'); draft.mucDich = v('d-mucDich');
     draft.tenTK = v('d-tenTK'); draft.soTK = v('d-soTK'); draft.nganHang = v('d-nganHang');
     draft.deNghiKhac = v('d-deNghiKhac'); draft.truongBoPhan = v('d-truongBoPhan');
@@ -640,6 +644,8 @@
     collect();
     const err = validate(draft);
     if (err) { App.toast(err, 'err'); return null; }
+    // đợt chi gõ mới → tạo luôn
+    if (draft._evName) { draft.eventId = await App.resolveEvent(draft._evName, draft.ngayLap); draft._evName = ''; }
     const rec = stripDraft(draft);
     rec.items = Docs.filledItems(rec);
     rec.total = Docs.total(rec);
@@ -647,6 +653,7 @@
     const before = original ? JSON.parse(original) : null;
     const changed = JSON.stringify(rec) !== original;
     await DB.put('docs', rec);
+    await rememberProfile(rec);
     // lịch sử chỉnh sửa (người lập, kế toán, quản trị đều xem được)
     if (wasNew) F().log(F().myId(), rec, 'Tạo phiếu', [TYPES[rec.type].label + ' · ' + money(rec.total)]);
     else if (changed) { const lines = F().diff(before, rec); if (lines.length) F().log(F().myId(), rec, 'Sửa phiếu', lines); }
@@ -663,6 +670,13 @@
     return rec;
   }
   Docs.saveDraft = saveDraft;
+  // hồ sơ cá nhân còn trống → lấy từ phiếu vừa lưu để lần sau tự điền
+  async function rememberProfile(rec) {
+    const s = App.settings; let ch = false;
+    const take = (k, v) => { if (!s[k] && v) { s[k] = v; ch = true; } };
+    take('hoTen', rec.nguoiDeNghi); take('boPhan', rec.boPhan); take('tenTK', rec.tenTK); take('soTK', rec.soTK); take('nganHang', rec.nganHang);
+    if (ch) { if (!s.tenNgan && s.hoTen) s.tenNgan = lastName(s.hoTen); await DB.put('settings', s); App.toast('Đã lưu thông tin vào Hồ sơ cá nhân để tự điền lần sau', 'ok'); }
+  }
 
   function docById(id) {
     if (id === '_draft') return collect();
@@ -780,12 +794,16 @@
         if (!exps.length) { App.toast('Chưa chọn khoản chi nào', 'err'); return; }
         const keep = Docs.filledItems(draft);
         draft.items = keep.concat(exps.map((e) => Docs.itemFromExpense(e, App.settings)));
-        if (!draft.eventId) { draft.eventId = ov.querySelector('#fx-ev').value; const sel = document.getElementById('d-eventId'); if (sel) sel.value = draft.eventId; }
+        if (!draft.eventId) { draft.eventId = ov.querySelector('#fx-ev').value; const sel = document.getElementById('d-event'); if (sel) sel.value = (App.eventById(draft.eventId) || {}).name || ''; }
         App.closeSheet(ov); rerenderItems();
         App.toast('Đã thêm ' + exps.length + ' dòng (kèm ảnh hoá đơn của khoản chi)', 'ok');
       };
     },
     async docSave() { await saveDraft(false); },
+    async docNudge() {
+      const d = App.data.docs.find((x) => x.id === draft.id); if (!d) return;
+      await F().nudge(d);
+    },
     async docSubmit() {
       const rec = await saveDraft(true); if (!rec) return;
       const d = App.data.docs.find((x) => x.id === rec.id) || rec;

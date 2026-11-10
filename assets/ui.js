@@ -107,6 +107,28 @@
     datalist(id, values) {
       return '<datalist id="' + id + '">' + (values || []).map((v) => '<option value="' + esc(v) + '">').join('') + '</datalist>';
     },
+    // Sự kiện / đợt chi: chọn trong danh sách HOẶC gõ tên mới → tự tạo & lưu khi lưu phiếu / khoản chi
+    eventPicker(id, label, eventId, o) {
+      o = o || {};
+      const ev = eventId ? App.eventById(eventId) : null;
+      return field(label, '<input class="input" id="' + id + '" list="' + id + '-dl" autocomplete="off" value="' + esc(ev ? ev.name : '') + '" placeholder="' + esc(o.ph || 'Chọn hoặc gõ tên đợt chi mới…') + '">' +
+        App.ui.datalist(id + '-dl', App.data.events.map((e) => e.name)), Object.assign({ for: id, hint: o.hint || 'Gõ tên mới → tự tạo đợt chi và lưu luôn.' }, o));
+    },
+  };
+  // tên → sự kiện (không phân biệt hoa thường / dấu)
+  App.findEventByName = function (name) {
+    const k = U.normText(String(name || '').trim()); if (!k) return null;
+    return App.data.events.find((e) => U.normText(e.name || '') === k) || null;
+  };
+  // trả về id sự kiện; chưa có thì tạo mới (ngày = hôm nay)
+  App.resolveEvent = async function (name, date) {
+    const n = String(name || '').trim(); if (!n) return null;
+    const ex = App.findEventByName(n); if (ex) return ex.id;
+    const ev = { id: U.uid(), name: n, date: date || U.todayISO(), location: '', createdAt: U.nowISO() };
+    await DB.put('events', ev);
+    await App.loadData();
+    App.toast('Đã tạo đợt chi “' + n + '”', 'ok');
+    return ev.id;
   };
   App.val = (id) => { const e = document.getElementById(id); return e ? String(e.value).trim() : ''; };
   App.valMoney = (id) => U.toNumber(App.val(id));
@@ -213,7 +235,7 @@
     if (!items || !items.length) return;
     let i = Math.max(0, Math.min(index || 0, items.length - 1)), zoom = 1, tx = 0;
     const lb = document.createElement('div');
-    lb.className = 'lb'; lb.setAttribute('role', 'dialog'); lb.setAttribute('aria-label', 'Xem ảnh');
+    lb.className = 'lbox'; lb.setAttribute('role', 'dialog'); lb.setAttribute('aria-label', 'Xem ảnh');
     lb.innerHTML = '<div class="lb-top"><span class="cnt"></span>' +
       '<button class="lb-btn" data-lb="zoom" title="Phóng to" aria-label="Phóng to">' + App.icon('zoom') + '</button>' +
       '<button class="lb-btn" data-lb="dl" title="Tải ảnh" aria-label="Tải ảnh">' + App.icon('download') + '</button>' +
@@ -299,7 +321,10 @@
   };
 
   /* ---- Tệp đính kèm của một phiếu (hoá đơn, hợp đồng, chứng từ) ---- */
-  App.renderAttachments = function (docId, readonly) {
+  App.FILE_ACCEPT = 'image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar,.ppt,.pptx';
+  App.renderAttachments = function (docId, readonly, isNew) {
+    if (isNew) return '<p class="muted" style="margin:0 0 10px;font-size:13px">Đính kèm hợp đồng, báo giá, bảng kê, PDF, Word, Excel… (phiếu được lưu nháp trước khi tải lên).</p>' +
+      '<button class="btn out sm" data-act="uploadFileNew">' + App.icon('upload') + 'Tải lên tệp đính kèm</button>';
     const files = App.data.images.filter((im) => im.docId === docId);
     const list = files.map((f) =>
       '<tr><td><div class="row" style="flex-wrap:nowrap">' + App.icon(f.kind === 'image' ? 'image' : 'file', 16) +
@@ -314,10 +339,11 @@
   };
 
   Object.assign(App.actions, {
+    async uploadFileNew() { const rec = await App.Docs.saveDraft(true); if (rec) await App.actions.uploadFile(rec.id); },
     async uploadFile(docId) {
       const doc = App.data.docs.find((d) => d.id === docId);
       if (!doc) { App.toast('Hãy lưu phiếu trước khi đính kèm tệp', 'err'); return; }
-      const files = await App.pickFiles('image/*,application/pdf,.doc,.docx,.xls,.xlsx', true);
+      const files = await App.pickFiles(App.FILE_ACCEPT, true);
       if (!files.length) return;
       for (const f of await App.prepFiles(files)) {
         const rec = App.makeImage(f, null, doc.eventId || null, { docId, name: f.name });

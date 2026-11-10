@@ -88,8 +88,10 @@
   App.screens['chi-tieu'] = function (root, route) {
     if (!App.data.events.length) {
       root.innerHTML = App.pageHead('Chi tiêu & minh chứng', 'Ghi từng khoản chi, chụp bill, phân loại hoá đơn — rồi lập phiếu hoàn ứng / thanh toán từ đây.') +
-        '<div class="card">' + App.emptyState('calendar', 'Chưa có sự kiện / đợt chi nào', 'Mỗi khoản chi thuộc một sự kiện hoặc đợt chi (VD: “Ngày hội STEM Cầu Giấy”, “Chi phí vận chuyển T9–T11”).',
-        '<button class="btn" data-act="addEvent">' + I('plus') + 'Tạo sự kiện / đợt chi</button>') + '</div>';
+        '<div class="card"><div class="card-b" style="max-width:560px;margin:auto;text-align:center;padding:36px 20px"><div class="eic" style="margin:0 auto 10px">' + I('calendar') + '</div><b>Gõ tên sự kiện / đợt chi để bắt đầu</b>' +
+        '<p class="muted" style="font-size:13px">VD: “Ngày hội STEM Cầu Giấy”, “Chi phí vận chuyển T11”. Đợt chi được tạo và lưu ngay.</p>' +
+        '<div class="row" style="flex-wrap:nowrap;gap:8px;justify-content:center"><input class="input" id="ct-new-ev" placeholder="Tên đợt chi…" style="max-width:340px"><button class="btn" data-act="ctNewEvent">' + I('plus') + 'Tạo</button></div></div></div>';
+      setTimeout(() => { const i = document.getElementById('ct-new-ev'); if (i) i.onkeydown = (e) => { if (e.key === 'Enter') App.actions.ctNewEvent(); }; }, 0);
       return;
     }
     const evId = currentEventId(route);
@@ -132,9 +134,11 @@
     root.innerHTML = App.pageHead('Chi tiêu & minh chứng', esc(ev.name) + (ev.date ? ' · ' + esc(U.fmtDate(ev.date)) : '') + (ev.location ? ' · ' + esc(ev.location) : ''),
       '<a class="btn out" href="#/phieu/moi/HU?event=' + evId + '">' + I('wallet') + 'Lập phiếu hoàn ứng</a>' +
       '<a class="btn out" href="#/phieu/moi/TT?event=' + evId + '">' + I('calc') + 'Lập phiếu thanh toán</a>' +
+      '<button class="btn out" data-act="bulkExpense">' + I('list') + 'Nhập nhiều khoản</button>' +
       '<button class="btn" data-act="addExpense">' + I('plus') + 'Thêm khoản chi</button>') +
       '<div class="row" style="margin:-6px 0 16px;flex-wrap:nowrap">' +
-      '<div style="flex:1;max-width:460px">' + App.selectBare('ct-ev', evId, App.data.events.map((e) => ({ v: e.id, t: e.name + (e.date ? ' · ' + U.fmtDate(e.date) : '') }))) + '</div>' +
+      '<div style="flex:1;max-width:460px"><label class="sr" for="ct-ev">Đợt chi</label><input class="input" id="ct-ev" list="ct-ev-dl" autocomplete="off" value="' + esc(ev.name) + '" title="Chọn hoặc gõ tên đợt chi mới rồi Enter">' +
+        App.ui.datalist('ct-ev-dl', App.data.events.map((e) => e.name)) + '</div>' +
       '<button class="btn out icon" data-act="editEvent:' + evId + '" title="Sửa sự kiện" aria-label="Sửa sự kiện">' + I('edit') + '</button>' +
       '<button class="btn out icon" data-act="addEvent" title="Thêm sự kiện" aria-label="Thêm sự kiện">' + I('plus') + '</button></div>' +
       '<div class="kpis k4">' +
@@ -151,7 +155,10 @@
       '</div><div id="exp-list">' + listHTML() + '</div></div>' +
       '<button class="fab" data-act="quickCapture" aria-label="Chụp bill nhanh">' + I('camera') + '</button>';
 
-    document.getElementById('ct-ev').onchange = (e) => App.nav('chi-tieu/' + e.target.value);
+    const ctEv = document.getElementById('ct-ev');
+    const goEv = async () => { const n = ctEv.value.trim(); if (!n || n === ev.name) return; const id = await App.resolveEvent(n); if (id) App.nav('chi-tieu/' + id); };
+    ctEv.onchange = goEv; ctEv.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); goEv(); } };
+    ctEv.onfocus = () => ctEv.select();
     App._repaintExp = () => {
       const l = document.getElementById('exp-list'); if (l) l.innerHTML = listHTML();
       const c = document.getElementById('exp-chips'); if (c) c.innerHTML = chips();
@@ -258,7 +265,101 @@
     App.reload();
   }
 
+  /* ----------------- Nhập nhiều khoản chi: điền theo dòng / dán từ Excel / file mẫu ----------------- */
+  const BULK_COLS = ['Ngày chi', 'Nội dung', 'Số tiền', 'Hoá đơn (VAT/bill/không)', 'Phân loại', 'Người tham gia', 'Ghi chú'];
+  const vatOf = (t) => { const x = U.normText(t || ''); return /vat|gtgt|hd do|hoa don do/.test(x) ? 'vat' : /bill|ban le|hoa don/.test(x) ? 'bill' : 'none'; };
+  const catOf = (t) => { const x = U.normText(t || ''); return App.CATEGORIES.find((c) => U.normText(c) === x) || App.CATEGORIES.find((c) => x && U.normText(c).indexOf(x) >= 0) || 'Khác'; };
+  function dateOf(v) {
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    const s = String(v == null ? '' : v).trim(); if (!s) return '';
+    let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s); if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+    m = /^(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?$/.exec(s);
+    if (m) { const y = m[3] ? (m[3].length === 2 ? '20' + m[3] : m[3]) : String(new Date().getFullYear()); return y + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); }
+    if (/^\d{5}$/.test(s)) { const d = new Date(Date.UTC(1899, 11, 30) + (+s) * 864e5); return d.toISOString().slice(0, 10); }
+    return '';
+  }
+  function bulkRow(r, i) {
+    const s = App.settings;
+    r = r || { date: U.todayISO(), content: '', amount: '', vat: 'none', cat: 'Khác', who: s.tenNgan || App.lastName(s.hoTen) || '', note: '' };
+    return '<tr data-b="' + i + '"><td class="ix">' + (i + 1) + '</td>' +
+      '<td data-l="Ngày chi"><input class="input" type="date" data-k="date" value="' + esc(r.date) + '"></td>' +
+      '<td data-l="Nội dung" style="min-width:200px"><input class="input" data-k="content" value="' + esc(r.content) + '" placeholder="Nội dung chi"></td>' +
+      '<td data-l="Số tiền" style="width:130px"><input class="input money" data-k="amount" data-money inputmode="numeric" value="' + (U.toNumber(r.amount) ? U.groupThousand(r.amount) : '') + '" placeholder="0"></td>' +
+      '<td data-l="Hoá đơn"><select class="select" data-k="vat">' + App.VAT_TYPES.map((o) => '<option value="' + o.v + '"' + (o.v === r.vat ? ' selected' : '') + '>' + esc(o.t) + '</option>').join('') + '</select></td>' +
+      '<td data-l="Phân loại"><select class="select" data-k="cat">' + App.CATEGORIES.map((c) => '<option' + (c === r.cat ? ' selected' : '') + '>' + esc(c) + '</option>').join('') + '</select></td>' +
+      '<td data-l="Người tham gia"><input class="input" data-k="who" value="' + esc(r.who) + '"></td>' +
+      '<td data-l="Ghi chú"><input class="input" data-k="note" value="' + esc(r.note) + '" placeholder="Số HĐ…"></td>' +
+      '<td class="del"><button class="btn ghost icon xs" data-bdel="' + i + '" aria-label="Xoá dòng">' + I('x', 14) + '</button></td></tr>';
+  }
+  function openBulk() {
+    const evId = currentEventId(App.route);
+    const ev = App.eventById(evId);
+    let rows = [null, null, null, null, null];
+    const ov = App.openSheet(App.sheetHead('Nhập nhiều khoản chi', 'Điền từng dòng, dán từ Excel / Zalo, hoặc chọn file mẫu Excel') +
+      '<div class="fgrid c2">' + App.ui.eventPicker('bk-ev', 'Sự kiện / đợt chi', evId) +
+      '<div class="field"><label>Nhập nhanh</label><div class="row" style="gap:8px"><button class="btn out sm" id="bk-paste">' + I('copy') + 'Dán từ Excel</button><button class="btn out sm" id="bk-file">' + I('excel') + 'Chọn file Excel</button><button class="btn ghost sm" id="bk-tpl">' + I('download') + 'Tải file mẫu</button></div></div></div>' +
+      '<div id="bk-pastebox" hidden class="mt8"><textarea class="textarea" id="bk-text" rows="4" placeholder="Copy các dòng trong Excel (cột: ' + esc(BULK_COLS.join(' · ')) + ') rồi dán vào đây"></textarea><div class="row mt8" style="gap:8px"><button class="btn sm" id="bk-parse">' + I('check') + 'Đưa vào bảng</button><span class="muted" style="font-size:12.5px">Ngày dạng 05/11/2026 hoặc 05/11 · Số tiền 350.000 · Hoá đơn: VAT / bill / không</span></div></div>' +
+      '<div class="tbl-wrap mt12"><table class="tbl items cards"><thead><tr><th>#</th><th>Ngày chi</th><th>Nội dung</th><th>Số tiền</th><th>Hoá đơn</th><th>Phân loại</th><th>Người tham gia</th><th>Ghi chú</th><th></th></tr></thead><tbody id="bk-body"></tbody></table></div>' +
+      '<div class="row mt8" style="justify-content:space-between"><button class="btn sec sm" id="bk-add">' + I('plus') + 'Thêm 5 dòng</button><b id="bk-sum"></b></div>' +
+      '<div class="sheet-f"><button class="btn out" data-act="closeTop">Huỷ</button><button class="btn" id="bk-save">' + I('check') + 'Lưu các khoản chi</button></div>', { wide: true });
+    const body = ov.querySelector('#bk-body');
+    const read = () => Array.from(body.querySelectorAll('tr')).map((tr) => { const o = {}; tr.querySelectorAll('[data-k]').forEach((x) => { o[x.getAttribute('data-k')] = x.value; }); o.amount = U.toNumber(o.amount); return o; });
+    const sum = () => { const l = read().filter((r) => r.content || r.amount); ov.querySelector('#bk-sum').textContent = l.length + ' khoản · ' + money(l.reduce((a, r) => a + r.amount, 0)); };
+    const paint = () => { body.innerHTML = rows.map(bulkRow).join(''); sum(); };
+    paint();
+    body.addEventListener('input', sum);
+    body.addEventListener('click', (e) => { const b = e.target.closest('[data-bdel]'); if (!b) return; rows = read(); rows.splice(+b.getAttribute('data-bdel'), 1); if (!rows.length) rows = [null]; paint(); });
+    ov.querySelector('#bk-add').onclick = () => { rows = read().concat([null, null, null, null, null]); paint(); };
+    const fill = (list) => {
+      const cur = read().filter((r) => r.content || r.amount);
+      const s = App.settings, who = s.tenNgan || App.lastName(s.hoTen) || '';
+      const add = list.filter((r) => r && (String(r[1] || '').trim() || U.toNumber(r[2]))).map((r) => ({ date: dateOf(r[0]) || U.todayISO(), content: String(r[1] || '').trim(), amount: U.toNumber(r[2]), vat: vatOf(r[3]), cat: catOf(r[4]), who: String(r[5] || '').trim() || who, note: String(r[6] || '').trim() }));
+      rows = cur.concat(add);
+      if (!rows.length) rows = [null];
+      paint(); App.toast('Đã đưa ' + add.length + ' dòng vào bảng — kiểm tra rồi bấm Lưu', 'ok');
+    };
+    ov.querySelector('#bk-paste').onclick = () => { const b = ov.querySelector('#bk-pastebox'); b.hidden = !b.hidden; if (!b.hidden) ov.querySelector('#bk-text').focus(); };
+    ov.querySelector('#bk-parse').onclick = () => {
+      const txt = ov.querySelector('#bk-text').value;
+      const lines = txt.split(/\r?\n/).map((l) => l.split(/\t|;/)).filter((c) => c.join('').trim());
+      fill(lines.filter((c) => dateOf(c[0]) || !/^(ngay|stt)/.test(U.normText(c[0] || ''))));
+      ov.querySelector('#bk-text').value = ''; ov.querySelector('#bk-pastebox').hidden = true;
+    };
+    ov.querySelector('#bk-tpl').onclick = async () => {
+      const E = await App.ensureLib('exceljs'); const wb = new E.Workbook(); const ws = wb.addWorksheet('Khoản chi');
+      ws.columns = BULK_COLS.map((h, i) => ({ header: h, width: [12, 40, 14, 22, 18, 20, 26][i] }));
+      ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }; ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF6B3DBE' } };
+      ws.addRow(['05/11/2026', 'Taxi đi trường', 350000, 'bill', 'Di chuyển', 'An, Dũng', '']);
+      ws.addRow(['05/11/2026', 'Cơm trưa đội ngũ (8 suất)', 900000, 'VAT', 'Ăn uống', 'Đội ngũ', 'HĐ số 0012']);
+      const v = wb.addWorksheet('Danh mục'); v.addRow(['Phân loại']); App.CATEGORIES.forEach((c) => v.addRow([c])); v.addRow([]); v.addRow(['Hoá đơn: VAT / bill / không']);
+      U.saveBlob(new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'Mau-nhap-khoan-chi.xlsx');
+    };
+    ov.querySelector('#bk-file').onclick = async () => {
+      const fs = await App.pickFiles('.xlsx', false); if (!fs.length) return;
+      try {
+        const E = await App.ensureLib('exceljs'); const wb = new E.Workbook(); await wb.xlsx.load(await fs[0].arrayBuffer());
+        const ws = wb.worksheets[0], out = [];
+        ws.eachRow((row, n) => { if (n === 1) return; out.push(row.values.slice(1, 8).map((x) => (x && typeof x === 'object' && !(x instanceof Date) ? (x.result != null ? x.result : x.text || '') : x))); });
+        fill(out);
+      } catch (e) { App.toast('Không đọc được file: ' + (e.message || e), 'err'); }
+    };
+    ov.querySelector('#bk-save').onclick = async () => {
+      const list = read().filter((r) => r.content || r.amount);
+      if (!list.length) { App.toast('Chưa có dòng nào', 'err'); return; }
+      const bad = list.findIndex((r) => !r.content || !r.amount);
+      if (bad >= 0) { App.toast('Dòng ' + (bad + 1) + ' thiếu nội dung hoặc số tiền', 'err'); return; }
+      const evName = App.val('bk-ev');
+      const eid = (await App.resolveEvent(evName || (ev && ev.name) || ('Đợt chi ' + U.fmtDate(U.todayISO())))) || evId;
+      for (const r of list) await DB.put('expenses', { id: U.uid(), eventId: eid, date: r.date || U.todayISO(), content: r.content, amount: r.amount, vatType: r.vat, category: r.cat, participants: r.who, ghiChu: r.note, transferNote: '', createdAt: U.nowISO() });
+      App.closeAllSheets(); App.toast('Đã lưu ' + list.length + ' khoản chi · ' + money(list.reduce((a, r) => a + r.amount, 0)), 'ok');
+      App.nav('chi-tieu/' + eid);
+    };
+  }
+  App.openBulkExpense = openBulk;
+
   Object.assign(App.actions, {
+    bulkExpense() { openBulk(); },
+    async ctNewEvent() { const n = App.val('ct-new-ev'); if (!n) { App.toast('Nhập tên đợt chi', 'err'); return; } const id = await App.resolveEvent(n); if (id) App.nav('chi-tieu/' + id); },
     addExpense() { openExpenseEditor(null, null); },
     expFilterCat(cat) { if (App.expFilter) App.expFilter.cat = cat || 'all'; if (App._repaintExp) App._repaintExp(); },
     quickCapture() { openCamera((blobs) => { if (App.draftExpense && document.getElementById('exp-images')) addImages(blobs); else openExpenseEditor(null, blobs); }); },

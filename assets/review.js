@@ -25,6 +25,7 @@
   App.screens.duyet = function (root, route) {
     if (guard(root)) return;
     if (route.parts[1] && route.parts[2]) return detail(root, route.parts[1], route.parts[2]);
+    if (route.q.tab) { (App.dyF || (App.dyF = { tab: 'cho-duyet', type: '', who: '', m: '', q: '' })).tab = route.q.tab; history.replaceState(null, '', '#/duyet'); }
     list(root);
   };
 
@@ -37,11 +38,12 @@
     const f = App.dyF || (App.dyF = { tab: 'cho-duyet', type: '', who: '', m: '', q: '' });
     const st = (d) => Fl.status(d, d._owner);
     const docs = all.docs;
-    const cnt = {}; Fl.ST_ORDER.forEach((k) => { cnt[k] = 0; }); docs.forEach((d) => { cnt[st(d)]++; });
+    const done = (d) => Fl.isDone(d, d._owner);
+    const cnt = { xong: 0 }; Fl.ST_ORDER.forEach((k) => { cnt[k] = 0; }); docs.forEach((d) => { if (done(d)) cnt.xong++; else cnt[st(d)]++; });
     const people = Array.from(new Map(docs.map((d) => [d._owner, d._ownerName])).entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1])));
     const months = Array.from(new Set(docs.map((d) => String(d.ngayLap || '').slice(0, 7)).filter(Boolean))).sort().reverse();
     const match = (d) => {
-      if (f.tab !== 'all' && st(d) !== f.tab) return false;
+      if (f.tab === 'xong') { if (!done(d)) return false; } else if (f.tab !== 'all' && (done(d) || st(d) !== f.tab)) return false;
       if (f.type && d.type !== f.type) return false;
       if (f.who && d._owner !== f.who) return false;
       if (f.m && String(d.ngayLap || '').slice(0, 7) !== f.m) return false;
@@ -54,8 +56,10 @@
     const open = an.tus.filter((x) => x.k === 'open');
     const rw = an.hus.filter((x) => x.k === 'refund-wait' || x.k === 'refund-due');
     const missHd = an.lines.filter((x) => !x.has);
+    const apprN = docs.filter((d) => d.type !== 'HU' && st(d) === 'da-duyet' && !done(d));
+    const topN = an.hus.filter((x) => x.k === 'topup-due' || x.k === 'topup-pending');
 
-    const tabs = [['cho-duyet', 'Chờ duyệt'], ['can-bo-sung', 'Cần bổ sung'], ['da-duyet', 'Đã duyệt'], ['da-chi', 'Đã duyệt chi'], ['tu-choi', 'Từ chối'], ['nhap', 'Nháp (chưa gửi)'], ['all', 'Tất cả']];
+    const tabs = [['cho-duyet', 'Chờ duyệt'], ['can-bo-sung', 'Cần bổ sung'], ['da-duyet', 'Đã duyệt'], ['da-chi', 'Đã duyệt chi'], ['xong', 'Đã hoàn tất'], ['tu-choi', 'Từ chối'], ['nhap', 'Nháp (chưa gửi)'], ['all', 'Tất cả']];
     const tabBtn = (t) => '<button class="' + (f.tab === t[0] ? 'on' : '') + '" data-act="dyTab:' + t[0] + '">' + t[1] + ' <span class="cnt0">' + (t[0] === 'all' ? docs.length : cnt[t[0]]) + '</span></button>';
     const hdSum = (d) => {
       if (d.type === 'TU') return '<span class="muted">—</span>';
@@ -80,8 +84,9 @@
       '<div class="kpis k4">' +
       App.kpi('inbox', 'Chờ duyệt', cnt['cho-duyet'] + ' <small>phiếu</small>', money(pendAmt), cnt['cho-duyet'] ? 'hot' : '') +
       App.kpi('wallet', 'Tạm ứng chưa hoàn ứng', open.length + ' <small>phiếu</small>', money(open.reduce((a, x) => a + x.adv, 0))) +
-      App.kpi('restore', 'Chờ nộp lại', rw.length + ' <small>khoản</small>', money(rw.reduce((a, x) => a + x.diff, 0))) +
-      App.kpi('receipt', 'Dòng chưa có HĐ', missHd.length + ' <small>dòng</small>', money(missHd.reduce((a, x) => a + x.amount, 0))) + '</div>' +
+      App.kpi('lock', 'Đã duyệt, chưa chi', apprN.length + ' <small>phiếu</small>', money(apprN.reduce((a, d) => a + Dc.total(d), 0)), apprN.length ? 'hot' : '') +
+      App.kpi('restore', 'Nộp lại / chi bù', (rw.length + topN.length) + ' <small>khoản</small>', 'Nộp lại ' + money(rw.reduce((a, x) => a + x.diff, 0)) + ' · bù ' + money(topN.reduce((a, x) => a + -x.diff, 0))) + '</div>' +
+      (missHd.length ? '<div class="alert warn mt12">' + I('receipt') + '<div>' + missHd.length + ' dòng chi chưa có hoá đơn (' + money(missHd.reduce((a, x) => a + x.amount, 0)) + ') — xem <a href="#/doi-chieu?tab=hd">Đối chiếu → Hoá đơn</a>.</div></div>' : '') +
       '<div class="card mt16"><div class="card-h" style="flex-wrap:wrap;gap:10px"><div class="seg scroll">' + tabs.map(tabBtn).join('') + '</div></div>' +
       '<div class="card-b" style="padding-bottom:12px"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">' +
       '<div class="search field mb0"><label class="sr" for="dy-q">Tìm</label>' + I('search') + '<input class="input" id="dy-q" type="search" placeholder="Tìm số phiếu, người, nội dung, số tiền…" value="' + esc(f.q) + '"></div>' +
@@ -133,7 +138,9 @@
     const B = (s, cls, ic, t) => '<button class="btn ' + cls + '" data-act="dyDecide:' + s + '">' + I(ic) + t + '</button>';
     let acts = '';
     if (st === 'nhap') acts = '<span class="badge out">Người lập chưa gửi phiếu này</span>';
-    else if (locked) acts = (st === 'da-duyet' && doc.type !== 'HU' ? B('da-chi', 'accent', 'lock', 'Duyệt chi') : '') + B('mo-lai', 'out', 'unlock', 'Mở lại');
+    else if (locked) acts = (st === 'da-duyet' && doc.type !== 'HU' ? B('da-chi', 'accent', 'lock', 'Duyệt chi') : '') +
+      (Fl.isDone(doc, owner) ? '<button class="btn out" data-act="dyDone:0">' + I('restore') + 'Bỏ hoàn tất</button>' : '<button class="btn sec" data-act="dyDone:1">' + I('check') + 'Xác nhận hoàn tất hồ sơ</button>') +
+      '<button class="btn out" data-act="proofAdd">' + I('upload') + 'Minh chứng chi</button>' + B('mo-lai', 'out', 'unlock', 'Mở lại');
     else acts = B('da-duyet', '', 'check', doc.type === 'HU' ? 'Duyệt quyết toán' : 'Duyệt') + (doc.type !== 'HU' ? B('da-chi', 'accent', 'lock', 'Duyệt chi') : '') +
       B('can-bo-sung', 'out warn-b', 'alert', 'Cần xem xét lại') + B('tu-choi', 'out danger-b', 'x', 'Từ chối');
     const exp = '<button class="btn out" data-act="docWord:' + esc(doc.id) + '">' + I('word') + 'Word</button><button class="btn out" data-act="docExcel:' + esc(doc.id) + '">' + I('excel') + 'Excel</button>' +
@@ -146,7 +153,8 @@
       const x = an.tus.find((t) => key(t.tu) === key(doc)) || {};
       link = '<div class="alert ' + (x.done ? 'ok' : 'info') + '">' + I('wallet') + '<div style="flex:1"><b>Theo dõi tạm ứng:</b> <span class="badge ' + (x.cls || 'out') + '">' + esc(x.label || '') + '</span>' +
         (x.hu ? '<br>Hoàn ứng: ' + docA(x.hu) + ' · thực chi ' + money(x.spent) + ' · chênh lệch ' + money(Math.abs(x.diff)) : '') +
-        (x.tt ? '<br>DNTT bù: ' + docA(x.tt) : '') + (x.paid ? '<br>Đã chi ' + U.fmtDate(x.paid.at) + (x.paid.ref ? ' · Mã GD <span class="mono">' + esc(x.paid.ref) + '</span>' : '') : '') + '</div></div>';
+        (x.tt ? '<br>DNTT bù: ' + docA(x.tt) : '') + (x.paid ? '<br>Đã chi ' + U.fmtDate(x.paid.at) + (x.paid.ref ? ' · Mã GD <span class="mono">' + esc(x.paid.ref) + '</span>' : '') : '') +
+        (x.k === 'open' ? '<div class="mt8"><button class="btn sm" data-act="dyRemind">' + I('bell') + 'Nhắc nhân sự hoàn ứng</button></div>' : '') + '</div></div>';
     } else if (doc.type === 'HU') {
       const x = an.hus.find((h) => key(h.hu) === key(doc)) || {};
       const rr = x.refundReport && x.refundReport.data;
@@ -156,6 +164,8 @@
         (x.tt ? '<div class="mt8">DNTT bù: ' + docA(x.tt) + '</div>' : '') +
         (rr ? '<div class="mt8">Nhân sự báo: ' + esc(rr.text || '') + (rr.img ? ' <a href="#" data-act="dyRefImg">[ảnh biên lai]</a>' : '') + '</div>' : '') +
         (x.diff > 0 && locked && !(x.refund && x.refund.ok) ? '<div class="mt8"><button class="btn sm" data-act="dyRefund">' + I('check') + 'Xác nhận đã nhận ' + money(x.diff) + ' về TK công ty</button></div>' : '') +
+        (x.diff < 0 && locked && (x.k === 'topup-due' || x.k === 'topup-pending') ? '<div class="mt8"><button class="btn sm" data-act="dyTopup">' + I('check') + 'Xác nhận công ty đã chi bù ' + money(-x.diff) + '</button></div>' : '') +
+        (x.topup && x.topup.ok ? '<div class="mt8 ok-t">' + I('check', 14) + ' Công ty đã chi bù ' + money(x.topup.amount) + ' ngày ' + esc(U.fmtDate(x.topup.at)) + (x.topup.ref ? ' · Mã GD ' + esc(x.topup.ref) : '') + '</div>' : '') +
         (x.refund && x.refund.ok ? '<div class="mt8 ok-t">' + I('check', 14) + ' Đã nhận ' + money(x.refund.amount) + ' ngày ' + esc(U.fmtDate(x.refund.at)) + (x.refund.ref ? ' · Mã GD ' + esc(x.refund.ref) : '') + ' (' + esc(x.refund.byName || '') + ')</div>' : '') + '</div></div>';
     } else {
       const hu = doc.huDocId ? all.docs.find((d) => d._owner === owner && d.id === doc.huDocId) : null;
@@ -200,7 +210,7 @@
       '</tbody><tfoot><tr><td colspan="2">CỘNG</td><td class="num">' + money(total) + '</td><td colspan="4"></td></tr></tfoot></table></div>' +
       (general.length ? '<div style="padding:12px 16px"><b style="font-size:13px">Tệp đính kèm chung (' + general.length + ')</b><div class="row mt8" style="gap:8px">' + general.map((g) => '<a href="#" class="btn out xs" data-act="dyGen:' + esc(g.id) + '">' + I(g.kind === 'image' ? 'image' : 'file', 14) + esc((g.name || 'Tệp').slice(0, 28)) + '</a>').join('') + '</div></div>' : '') +
       '</div></div>' +
-      Fl.threadCard(owner, doc) +
+      '<div id="proof-box"></div>' + Fl.threadCard(owner, doc) +
       '</div>' +
       '<div class="pv-col"><div class="sticky-pv" style="position:sticky;top:80px"><div class="row" style="margin-bottom:8px"><b>Tờ phiếu</b><span class="spacer"></span><button class="btn ghost xs" data-act="adminPrint:' + esc(doc.id) + '">' + I('printer', 14) + 'In</button></div>' +
       '<div id="doc-preview">' + Dc.previewBox(doc) + '</div></div></div></div>';
@@ -245,6 +255,7 @@
         await F().decide(owner, doc, status, { note, paidAt: App.val('dc-date'), ref: App.val('dc-ref'), amount: status === 'da-chi' ? App.valMoney('dc-amt') : undefined });
         App.closeSheet(ov); App.toast(x.btn + ': ' + doc.soPhieu + ' — đã báo cho ' + doc._ownerName, 'ok');
         paint(document.getElementById('screen'));
+        if (status === 'da-chi') setTimeout(() => F().proofSheet(owner, doc, () => F().loadThread(owner, doc)), 350);
       } catch (e) { btn.disabled = false; App.toast('Lỗi: ' + (e.message || e), 'err'); }
     };
   }
@@ -275,6 +286,24 @@
       if (g.kind === 'image') App.lightbox(App.imageItems([g]), 0); else U.saveBlob(g.blob, U.safeName(g.name || 'tep'));
     },
     dyAsk(itemId) { if (cur) F().askRequest(cur.owner, cur.doc, itemId); },
+    async dyDone(v) {
+      if (!cur) return;
+      try { await F().markDone(cur.owner, cur.doc, v === '1'); App.toast(v === '1' ? 'Đã chuyển sang “Đã hoàn tất”' : 'Đã bỏ hoàn tất', 'ok'); paint(document.getElementById('screen')); }
+      catch (e) { App.toast('Lỗi: ' + (e.message || e), 'err'); }
+    },
+    async dyRemind() { if (!cur) return; if (await F().remind(cur.owner, cur.doc)) { App.toast('Đã nhắc ' + cur.doc._ownerName, 'ok'); F().loadThread(cur.owner, cur.doc); } },
+    dyTopup() {
+      if (!cur) return;
+      const { owner, doc } = cur, ui = App.ui, x = F().analyze(cur.all).hus.find((h) => h.hu.id === doc.id && h.o === owner) || {};
+      const ov = App.openSheet(App.sheetHead('Xác nhận công ty đã chi bù', doc.soPhieu + ' · ' + doc._ownerName) +
+        '<p class="muted" style="font-size:13px;margin:0 0 10px">Dùng khi chuyển trả phần chi vượt trực tiếp cho nhân sự (không qua DNTT bù).</p>' +
+        '<div class="fgrid c2">' + ui.money('tp-amt', 'Số tiền chi bù', -x.diff) + ui.date('tp-date', 'Ngày chuyển', U.todayISO()) + '<div class="sall">' + ui.text('tp-ref', 'Mã giao dịch', '') + '</div></div>' +
+        '<div class="sheet-f"><button class="btn out" data-act="closeTop">Huỷ</button><button class="btn" id="tp-ok">' + I('check') + 'Xác nhận</button></div>', { center: true });
+      ov.querySelector('#tp-ok').onclick = async () => {
+        try { await F().confirmTopup(owner, doc, { amount: App.valMoney('tp-amt'), date: App.val('tp-date'), ref: App.val('tp-ref') }); App.closeSheet(ov); cur.all = await F().loadAll(true); paint(document.getElementById('screen')); App.toast('Đã xác nhận chi bù', 'ok'); setTimeout(() => F().proofSheet(owner, doc, () => F().loadThread(owner, doc)), 350); }
+        catch (e) { App.toast('Lỗi: ' + (e.message || e), 'err'); }
+      };
+    },
     dyRefImg() {
       if (!cur) return;
       const m = (F().refunds || []).filter((x) => x.owner === cur.owner && x.doc_id === cur.doc.id).pop();

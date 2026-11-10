@@ -26,7 +26,7 @@
   }
   const PRESETS = [['thang', 'Tháng này'], ['prev', 'Tháng trước'], ['quy', 'Quý này'], ['quytruoc', 'Quý trước'], ['nam', 'Năm nay'], ['namtruoc', 'Năm trước'], ['all', 'Tất cả'], ['tuy', 'Tuỳ chọn']];
   function filt() {
-    const f = App.dcF || (App.dcF = { p: 'thang', from: '', to: '', who: '', tab: 'tong', onlyMiss: true });
+    const f = App.dcF || (App.dcF = { p: 'thang', from: '', to: '', who: '', tab: 'tong', onlyMiss: true, type: '', st: '' });
     if (f.p !== 'tuy') { const r = range(f.p); f.from = r[0]; f.to = r[1]; f.label = r[2]; }
     else f.label = (f.from ? U.fmtDate(f.from) : '…') + ' – ' + (f.to ? U.fmtDate(f.to) : '…');
     return f;
@@ -38,11 +38,13 @@
     const Fl = F(), Dc = D();
     const sc = Object.assign({}, scope, { docs: scope.docs.filter((d) => !f.who || d._owner === f.who) });
     const a = Fl.analyze(sc);
-    const tus = a.tus.filter((x) => x.k !== 'draft' && inR(f, (x.paid && x.paid.at) || x.tu.ngayLap));
-    const hus = a.hus.filter((x) => inR(f, x.hu.ngayLap));
-    const tts = a.tts.filter((x) => x.s !== 'nhap' && inR(f, (x.paid && x.paid.at) || x.t.ngayLap));
-    const lines = a.lines.filter((x) => inR(f, x.it.ngayChi || x.d.ngayLap));
-    const ledger = a.ledger.filter((x) => inR(f, x.date)).map((x, i) => Object.assign({ stt: i + 1 }, x));
+    const okT = (t) => !f.type || f.type === t, okS = (d) => !f.st || (f.st === 'xong' ? Fl.isDone(d, d._owner) : Fl.status(d, d._owner) === f.st);
+    const tus = a.tus.filter((x) => okT('TU') && okS(x.tu) && x.k !== 'draft' && inR(f, (x.paid && x.paid.at) || x.tu.ngayLap));
+    const hus = a.hus.filter((x) => okT('HU') && okS(x.hu) && inR(f, x.hu.ngayLap));
+    const tts = a.tts.filter((x) => okT('TT') && okS(x.t) && x.s !== 'nhap' && inR(f, (x.paid && x.paid.at) || x.t.ngayLap));
+    const lines = a.lines.filter((x) => okT(x.d.type) && okS(x.d) && inR(f, x.it.ngayChi || x.d.ngayLap));
+    const ledger = a.ledger.filter((x) => okT(x.d.type) && okS(x.d) && inR(f, x.date)).map((x, i) => Object.assign({ stt: i + 1 }, x));
+    const docsP = sc.docs.filter((d) => !d.deletedAt && okT(d.type) && okS(d) && inR(f, d.ngayLap)).sort((x, y) => String(x.ngayLap || '').localeCompare(String(y.ngayLap || '')));
     const paid = tus.filter((x) => x.s === 'da-chi');
     const sum = (arr, fn) => arr.reduce((s, x) => s + (fn(x) || 0), 0);
     const settledHu = paid.filter((x) => x.hu && ['da-duyet', 'da-chi'].includes(x.hs));
@@ -70,7 +72,7 @@
     tts.forEach((x) => { const p = P(x.o, x.t._ownerName); if (x.kind === 'bu') p.bu += x.total; else p.dl += x.total; });
     lines.forEach((x) => { const p = P(x.o, x.d._ownerName); if (!x.has) p.miss++; });
     sc.docs.filter((d) => inR(f, d.ngayLap) && Fl.status(d, d._owner) !== 'nhap').forEach((d) => { P(d._owner, d._ownerName).docs++; });
-    return { a, tus, hus, tts, lines, ledger, E, k, people: Object.values(people).sort((x, y) => String(x.name).localeCompare(String(y.name))), f, dc: Dc };
+    return { a, tus, hus, tts, lines, ledger, docsP, E, k, people: Object.values(people).sort((x, y) => String(x.name).localeCompare(String(y.name))), f, dc: Dc };
   }
 
   /* ---------------- màn hình ---------------- */
@@ -90,19 +92,22 @@
     const f = filt(), acc = F().isAcc(), R = compute(scope, f), E = R.E, k = R.k, Fl = F();
     App._dcR = R;
     const people = Array.from(new Map(scope.docs.map((d) => [d._owner, d._ownerName])).entries());
-    const tabs = [['tong', 'Tổng quan', 'grid'], ['tu', 'Theo dõi tạm ứng', 'wallet'], ['so', 'Sổ giao dịch', 'book'], ['tt', 'Thanh toán (DNTT)', 'calc'], ['hd', 'Hoá đơn', 'receipt']].concat(acc ? [['nguoi', 'Theo nhân sự', 'users']] : []);
-    const body = { tong: tongHTML, tu: tuHTML, so: soHTML, tt: ttHTML, hd: hdHTML, nguoi: nguoiHTML }[f.tab] || tongHTML;
+    const tabs = [['tong', 'Tổng quan', 'grid'], ['loai', 'Theo loại phiếu', 'file'], ['tu', 'Theo dõi tạm ứng', 'wallet'], ['hu', 'Hoàn ứng', 'restore'], ['so', 'Sổ giao dịch', 'book'], ['tt', 'Thanh toán (DNTT)', 'calc'], ['hd', 'Hoá đơn', 'receipt']].concat(acc ? [['nguoi', 'Theo nhân sự', 'users']] : []);
+    const body = { tong: tongHTML, loai: loaiHTML, tu: tuHTML, hu: huHTML, so: soHTML, tt: ttHTML, hd: hdHTML, nguoi: nguoiHTML }[f.tab] || tongHTML;
     root.innerHTML = App.pageHead('Đối chiếu & sổ theo dõi', (acc ? 'Toàn công ty' : 'Chứng từ của bạn') + ' · kỳ <b>' + esc(f.label) + '</b>' + (f.who ? ' · ' + esc((people.find((p) => p[0] === f.who) || [])[1] || '') : ''),
       '<button class="btn accent" data-act="dcExcel">' + I('excel') + 'Excel</button><button class="btn out" data-act="dcWord">' + I('word') + 'Word</button>' +
       '<button class="btn out" data-act="dcPdf">' + I('pdf') + 'PDF</button><button class="btn out" data-act="dcShare">' + I('share') + 'Gửi Zalo</button>') +
       '<div class="card"><div class="card-b" style="padding-bottom:14px"><div class="row" style="gap:8px;flex-wrap:wrap"><div class="seg scroll">' +
       PRESETS.map((p) => '<button class="' + (f.p === p[0] ? 'on' : '') + '" data-act="dcP:' + p[0] + '">' + p[1] + '</button>').join('') + '</div>' +
       (f.p === 'tuy' ? '<input class="input" type="date" id="dc-from" value="' + esc(f.from) + '" style="width:160px" aria-label="Từ ngày"><input class="input" type="date" id="dc-to" value="' + esc(f.to) + '" style="width:160px" aria-label="Đến ngày">' : '') +
-      (acc ? '<span class="spacer"></span>' + App.selectBare('dc-who', f.who, [{ v: '', t: 'Mọi nhân sự' }].concat(people.map((p) => ({ v: p[0], t: p[1] })))) : '') +
+      '<span class="spacer"></span>' + App.selectBare('dc-type', f.type, [{ v: '', t: 'Mọi loại phiếu' }, { v: 'TU', t: 'Tạm ứng' }, { v: 'HU', t: 'Hoàn ứng' }, { v: 'TT', t: 'Thanh toán (DNTT)' }]) +
+      App.selectBare('dc-st', f.st, [{ v: '', t: 'Mọi trạng thái' }].concat(Fl.ST_ORDER.map((v) => ({ v, t: Fl.ST[v].t }))).concat([{ v: 'xong', t: 'Đã hoàn tất hồ sơ' }])) +
+      (acc ? App.selectBare('dc-who', f.who, [{ v: '', t: 'Mọi nhân sự' }].concat(people.map((p) => ({ v: p[0], t: p[1] })))) : '') +
       '</div></div></div>' +
       '<div class="tabs-line mt16">' + tabs.map((t) => '<button class="' + (f.tab === t[0] ? 'on' : '') + '" data-act="dcTab:' + t[0] + '">' + I(t[2], 15) + t[1] + '</button>').join('') + '</div>' +
       '<div class="mt16">' + body(R) + '</div>';
     const w = document.getElementById('dc-who'); if (w) w.onchange = () => { f.who = w.value; draw(root, scope); };
+    [['dc-type', 'type'], ['dc-st', 'st']].forEach(([id, k]) => { const el = document.getElementById(id); if (el) el.onchange = () => { f[k] = el.value; draw(root, scope); }; });
     ['dc-from', 'dc-to'].forEach((id) => { const el = document.getElementById(id); if (el) el.onchange = () => { f[id === 'dc-from' ? 'from' : 'to'] = el.value; draw(root, scope); }; });
     const om = document.getElementById('hd-only'); if (om) om.onchange = () => { f.onlyMiss = om.checked; draw(root, scope); };
     void E; void k; void Fl;
@@ -145,7 +150,8 @@
   }
   function tuTable(list, compact) {
     if (!list.length) return App.emptyState('wallet', 'Không có tạm ứng trong kỳ', '');
-    return '<div class="tbl-wrap"><table class="tbl cards"><thead><tr><th>#</th><th>Người</th><th>Phiếu tạm ứng</th><th>Ngày chi</th><th class="num">Đã ứng</th><th>Hoàn ứng</th><th class="num">Thực chi</th><th class="num">Chênh lệch</th><th>Xử lý</th><th>Trạng thái</th></tr></thead><tbody>' +
+    const acc = F().isAcc();
+    return '<div class="tbl-wrap"><table class="tbl cards"><thead><tr><th>#</th><th>Người</th><th>Phiếu tạm ứng</th><th>Ngày chi</th><th class="num">Đã ứng</th><th>Hoàn ứng</th><th class="num">Thực chi</th><th class="num">Chênh lệch</th><th>Xử lý</th><th>Trạng thái</th>' + (acc ? '<th class="acts"></th>' : '') + '</tr></thead><tbody>' +
       list.map((x, i) => '<tr class="' + (x.done ? 'row-ok' : '') + '"><td class="ix">' + (i + 1) + '</td><td data-l="Người"><b>' + esc(x.tu._ownerName) + '</b></td>' +
         '<td data-l="Tạm ứng">' + docLink(x.tu) + '<span class="sub">' + esc((x.tu.noiDung || '').slice(0, 50)) + '</span>' + (x.soSo ? '<span class="sub mono">Sổ ' + esc(x.soSo) + '</span>' : '') + '</td>' +
         '<td data-l="Ngày chi" class="nowrap">' + esc(x.paid ? U.fmtDate(x.paid.at) : '—') + (x.paid && x.paid.ref ? '<span class="sub mono">' + esc(x.paid.ref) + '</span>' : '') + '</td>' +
@@ -154,13 +160,45 @@
         '<td class="num" data-l="Thực chi">' + (x.hu ? money(x.spent) : '—') + '</td>' +
         '<td class="num" data-l="Chênh lệch">' + (x.hu ? (x.diff > 0 ? '<span class="ok-t">+' + U.groupThousand(x.diff) + '</span>' : x.diff < 0 ? '<span class="danger-t">−' + U.groupThousand(-x.diff) + '</span>' : '0') : '—') + '</td>' +
         '<td data-l="Xử lý">' + (x.diff > 0 && x.hu ? 'Nộp lại ' + U.groupThousand(x.diff) : x.diff < 0 && x.hu ? (x.tt ? 'DNTT bù ' + docLink(x.tt) : 'Cần DNTT bù') : x.hu ? 'Khớp' : 'Lập hoàn ứng') + '</td>' +
-        '<td data-l="Trạng thái">' + B(x.cls || 'out', x.label) + '</td></tr>').join('') +
+        '<td data-l="Trạng thái">' + B(x.cls || 'out', x.label) + '</td>' + (acc ? '<td class="acts">' + (x.k === 'open' ? '<button class="btn out xs" data-act="dcRemind:' + esc(x.o) + '|' + esc(x.tu.id) + '">' + I('bell', 14) + 'Nhắc</button>' : '') + '</td>' : '') + '</tr>').join('') +
       (compact ? '' : '<tfoot><tr><td colspan="4">Cộng ' + list.length + ' phiếu</td><td class="num">' + money(list.reduce((a, x) => a + x.adv, 0)) + '</td><td></td><td class="num">' + money(list.reduce((a, x) => a + (x.hu ? x.spent : 0), 0)) + '</td><td colspan="3"></td></tr></tfoot>') + '</tbody></table></div>';
   }
   function tuHTML(R) {
     const grp = [['Chưa hoàn ứng', R.tus.filter((x) => x.k === 'open')], ['Đang xử lý (hoàn ứng chờ duyệt, phải nộp lại, chi bù)', R.tus.filter((x) => !x.done && x.k !== 'open' && x.s === 'da-chi')],
       ['Đã tất toán', R.tus.filter((x) => x.done)], ['Tạm ứng chưa chi (chờ duyệt / đã duyệt)', R.tus.filter((x) => x.s !== 'da-chi')]];
-    return grp.map(([t, l]) => '<div class="card mt16"><div class="card-h"><div class="t">' + esc(t) + ' <span class="cnt0">' + l.length + '</span></div><b>' + money(l.reduce((a, x) => a + x.adv, 0)) + '</b></div><div class="card-b flush">' + (l.length ? tuTable(l) : '<p class="muted" style="padding:14px 18px;margin:0;font-size:13px">Không có.</p>') + '</div></div>').join('');
+    const late = R.tus.filter((x) => x.k === 'open' && x.days > 15);
+    return (F().isAcc() && late.length ? '<div class="alert warn">' + I('clock') + '<div style="flex:1"><b>' + late.length + ' tạm ứng quá 15 ngày chưa hoàn ứng</b> · ' + money(late.reduce((a, x) => a + x.adv, 0)) + '</div><button class="btn sm" data-act="dcRemindAll">' + I('bell') + 'Nhắc tất cả</button></div>' : '') +
+      grp.map(([t, l]) => '<div class="card mt16"><div class="card-h"><div class="t">' + esc(t) + ' <span class="cnt0">' + l.length + '</span></div><b>' + money(l.reduce((a, x) => a + x.adv, 0)) + '</b></div><div class="card-b flush">' + (l.length ? tuTable(l) : '<p class="muted" style="padding:14px 18px;margin:0;font-size:13px">Không có.</p>') + '</div></div>').join('');
+  }
+  function loaiHTML(R) {
+    const Fl = F(), D_ = D(), T = D_.TYPES, docs = R.docsP;
+    const sts = Fl.ST_ORDER;
+    const mat = ['TU', 'HU', 'TT'].map((t) => {
+      const l = docs.filter((d) => d.type === t), c = (s) => l.filter((d) => Fl.status(d, d._owner) === s);
+      return '<tr><td data-l="Loại"><span class="tchip t-' + t + '">' + T[t].label + '</span></td><td class="num b" data-l="Tổng">' + l.length + '<span class="sub">' + money(l.reduce((a, d) => a + D_.total(d), 0)) + '</span></td>' +
+        sts.map((s) => { const x = c(s); return '<td class="num" data-l="' + Fl.ST[s].s + '">' + (x.length ? '<b>' + x.length + '</b><span class="sub">' + U.groupThousand(x.reduce((a, d) => a + D_.total(d), 0)) + '</span>' : '<span class="muted">—</span>') + '</td>'; }).join('') +
+        '<td class="num" data-l="Hoàn tất">' + l.filter((d) => Fl.isDone(d, d._owner)).length + '</td></tr>';
+    }).join('');
+    const list = docs.length ? '<div class="tbl-wrap"><table class="tbl cards"><thead><tr><th>#</th><th>Loại</th><th>Số phiếu</th><th>Người</th><th>Ngày lập</th><th>Nội dung</th><th class="num">Số tiền</th><th>Trạng thái</th><th>Đã chi</th></tr></thead><tbody>' +
+      docs.map((d, i) => { const r = Fl.reviewOf(d, d._owner) || {}, pd = r.paid;
+        return '<tr><td class="ix">' + (i + 1) + '</td><td data-l="Loại"><span class="tchip t-' + d.type + '">' + T[d.type].label + '</span>' + (d.type === 'TT' ? '<span class="sub">' + (d.huDocId ? 'Bù hoàn ứng' : 'Độc lập') + '</span>' : '') + '</td>' +
+          '<td data-l="Số phiếu">' + docLink(d) + (r.soSo ? '<span class="sub mono">Sổ ' + esc(r.soSo) + '</span>' : '') + '</td><td data-l="Người"><b>' + esc(d._ownerName) + '</b></td><td data-l="Ngày lập" class="nowrap">' + esc(U.fmtDate(d.ngayLap)) + '</td>' +
+          '<td data-l="Nội dung" style="min-width:200px">' + esc(d.noiDung || '') + '</td><td class="num b" data-l="Số tiền">' + money(D_.total(d)) + '</td>' +
+          '<td data-l="Trạng thái">' + Fl.badge(d, d._owner, true) + (Fl.isDone(d, d._owner) ? ' ' + B('ok', 'Hoàn tất') : '') + '</td><td data-l="Đã chi" class="nowrap">' + (pd ? esc(U.fmtDate(pd.at)) + (pd.ref ? '<span class="sub mono">' + esc(pd.ref) + '</span>' : '') : '—') + '</td></tr>'; }).join('') +
+      '</tbody><tfoot><tr><td colspan="6">Cộng ' + docs.length + ' phiếu</td><td class="num">' + money(docs.reduce((a, d) => a + D_.total(d), 0)) + '</td><td colspan="2"></td></tr></tfoot></table></div>' : App.emptyState('file', 'Không có phiếu', 'Thử đổi kỳ hoặc bộ lọc.');
+    return '<div class="card"><div class="card-h"><div class="t">' + I('grid') + 'Tổng hợp theo loại phiếu & trạng thái</div></div><div class="card-b flush"><div class="tbl-wrap"><table class="tbl cards"><thead><tr><th>Loại</th><th class="num">Tổng</th>' +
+      sts.map((s) => '<th class="num">' + Fl.ST[s].s + '</th>').join('') + '<th class="num">Hoàn tất</th></tr></thead><tbody>' + mat + '</tbody></table></div></div></div>' +
+      '<div class="card mt16"><div class="card-h"><div class="t">' + I('list') + 'Danh sách phiếu <span class="cnt0">' + docs.length + '</span></div><span class="muted" style="font-size:12.5px">Dùng bộ lọc Loại phiếu / Trạng thái ở trên</span></div><div class="card-b flush">' + list + '</div></div>';
+  }
+  function huHTML(R) {
+    const l = R.hus;
+    if (!l.length) return '<div class="card">' + App.emptyState('restore', 'Không có phiếu hoàn ứng trong kỳ', '') + '</div>';
+    return '<div class="card"><div class="card-h"><div class="t">' + I('restore') + 'Phiếu hoàn ứng & quyết toán <span class="cnt0">' + l.length + '</span></div></div><div class="card-b flush"><div class="tbl-wrap"><table class="tbl cards"><thead><tr><th>#</th><th>Người</th><th>Phiếu HU</th><th>Tạm ứng</th><th class="num">Đã ứng</th><th class="num">Thực chi</th><th class="num">Chênh lệch</th><th>Xử lý</th></tr></thead><tbody>' +
+      l.map((x, i) => '<tr class="' + (x.done ? 'row-ok' : '') + '"><td class="ix">' + (i + 1) + '</td><td data-l="Người"><b>' + esc(x.hu._ownerName) + '</b></td><td data-l="Phiếu HU">' + docLink(x.hu) + '<span class="sub">' + esc(U.fmtDate(x.hu.ngayLap)) + '</span></td>' +
+        '<td data-l="Tạm ứng">' + (x.tu ? docLink(x.tu) : esc(x.hu.tuSoPhieu || '—')) + '</td><td class="num" data-l="Đã ứng">' + money(x.adv) + '</td><td class="num b" data-l="Thực chi">' + money(x.spent) + '</td>' +
+        '<td class="num" data-l="Chênh lệch">' + (x.diff > 0 ? '<span class="ok-t">+' + U.groupThousand(x.diff) + '</span>' : x.diff < 0 ? '<span class="danger-t">−' + U.groupThousand(-x.diff) + '</span>' : '0') + '</td>' +
+        '<td data-l="Xử lý">' + B(x.cls || 'out', x.label) + '</td></tr>').join('') +
+      '</tbody><tfoot><tr><td colspan="4">Cộng</td><td class="num">' + money(l.reduce((a, x) => a + x.adv, 0)) + '</td><td class="num">' + money(l.reduce((a, x) => a + x.spent, 0)) + '</td><td colspan="2"></td></tr></tfoot></table></div></div></div>';
   }
   function soHTML(R) {
     const L = R.ledger;
@@ -306,7 +344,48 @@
       ws.autoFilter = { from: { row: hr, column: 1 }, to: { row: Math.max(hr, row - 1), column: 10 } };
       X.pageSetup(ws, row, 10, true);
     }
-    // 6) Theo nhân sự
+    // 6) Danh sách phiếu đầy đủ (mọi thông tin để đối chiếu)
+    {
+      const Fl = F();
+      const { ws, hr } = sheet('Danh sách phiếu', '6B3DBE', [5, 9, 18, 14, 20, 16, 11, 36, 14, 16, 18, 13, 14, 20, 12, 14, 12],
+        'DANH SÁCH PHIẾU · ' + R.f.label.toUpperCase(),
+        ['STT', 'Loại', 'Số phiếu', 'Số vào sổ', 'Người đề nghị', 'Bộ phận', 'Ngày lập', 'Nội dung', 'Số tiền', 'Trạng thái', 'Liên kết', 'Ngày gửi', 'Ngày duyệt', 'Người duyệt', 'Ngày chi', 'Mã GD', 'Hoàn tất']);
+      let row = hr + 1;
+      R.docsP.forEach((d, i) => {
+        const r = Fl.reviewOf(d, d._owner) || {}, s = Fl.status(d, d._owner);
+        X.tableRow(ws, row, [i + 1, Dc.TYPES[d.type].prefix, d.soPhieu, r.soSo || '', d._ownerName, d._dept || d.boPhan || '', App.Export._isoToDate(d.ngayLap), d.noiDung || '', Dc.total(d), Fl.ST[s].s,
+          d.type === 'HU' ? 'TU ' + (d.tuSoPhieu || '') : d.huDocId ? 'Bù HU' : d.type === 'TT' ? 'Độc lập' : '', d.submittedAt ? U.fmtDate(d.submittedAt.slice(0, 10)) : '', r.at && Fl.ST[r.status] ? U.fmtDate(r.at.slice(0, 10)) : '', r.byName || '',
+          r.paid ? U.fmtDate(r.paid.at) : '', r.paid ? r.paid.ref || '' : '', Fl.isDone(d, d._owner) ? 'Đã hoàn tất' : ''], ['c', 'c', '', '', '', '', 'd', '', 'n', '', '', 'c', 'c', '', 'c', '', 'c'], i % 2);
+        stCell(ws, row, 10, Fl.ST[s].cls, Fl.ST[s].s); row++;
+      });
+      X.totalRow(ws, row, 17, 'CỘNG', row > hr + 1 ? { 9: { formula: 'SUM(I' + (hr + 1) + ':I' + (row - 1) + ')', result: 0 } } : {});
+      ws.autoFilter = { from: { row: hr, column: 1 }, to: { row: Math.max(hr, row - 1), column: 17 } };
+      ws.views = [{ state: 'frozen', ySplit: hr, showGridLines: false }];
+      X.pageSetup(ws, row, 17, true);
+    }
+    // 7) Chi tiết từng dòng chi của mọi phiếu
+    {
+      const Fl = F();
+      const { ws, hr } = sheet('Chi tiết dòng chi', '0E7490', [5, 9, 18, 20, 6, 36, 11, 18, 8, 13, 14, 18, 12, 12, 28, 14],
+        'CHI TIẾT DÒNG CHI · ' + R.f.label.toUpperCase(),
+        ['STT', 'Loại', 'Số phiếu', 'Người', 'Dòng', 'Nội dung', 'Ngày chi', 'Người tham gia', 'SL', 'Đơn giá', 'Thành tiền', 'Hoá đơn', 'KT đối chiếu', 'KT nhận HĐ', 'Ghi chú', 'Trạng thái phiếu']);
+      let row = hr + 1, n = 0;
+      R.docsP.forEach((d) => {
+        const r = Fl.reviewOf(d, d._owner) || {}, s = Fl.status(d, d._owner);
+        Dc.filledItems(d).forEach((it, j) => {
+          const c = (r.items || {})[it.id] || {};
+          X.tableRow(ws, row, [++n, Dc.TYPES[d.type].prefix, d.soPhieu, d._ownerName, j + 1, it.noiDung || '', App.Export._isoToDate(it.ngayChi), it.nguoiThamGia || '', it.soLuong === '' ? '' : U.toNumber(it.soLuong) || it.soLuong,
+            U.toNumber(it.donGia), Dc.lineTotal(it), d.type === 'TU' ? '(tạm ứng)' : Fl.HD_T[Fl.hdOf(it)], c.ok ? '✓' : '', c.hd ? '✓' : '', it.ghiChu || '', Fl.ST[s].s], ['c', 'c', '', '', 'c', '', 'd', '', 'c', 'n', 'n', '', 'c', 'c', '', ''], n % 2);
+          if (d.type !== 'TU') stCell(ws, row, 12, Fl.HD_CLS[Fl.hdOf(it)], Fl.HD_T[Fl.hdOf(it)]);
+          row++;
+        });
+      });
+      X.totalRow(ws, row, 16, 'CỘNG', row > hr + 1 ? { 11: { formula: 'SUM(K' + (hr + 1) + ':K' + (row - 1) + ')', result: 0 } } : {});
+      ws.autoFilter = { from: { row: hr, column: 1 }, to: { row: Math.max(hr, row - 1), column: 16 } };
+      ws.views = [{ state: 'frozen', ySplit: hr, showGridLines: false }];
+      X.pageSetup(ws, row, 16, true);
+    }
+    // 8) Theo nhân sự
     if (R.people.length > 1 || F().isAcc()) {
       const { ws, hr } = sheet('Theo nhân sự', 'D6589A', [24, 10, 16, 16, 16, 16, 16, 16, 12], 'TỔNG HỢP THEO NHÂN SỰ · ' + R.f.label.toUpperCase(),
         ['Nhân sự', 'Phiếu gửi', 'Tạm ứng', 'Chưa hoàn ứng', 'Phải nộp lại', 'Chi vượt chưa bù', 'DNTT bù', 'DNTT độc lập', 'Dòng thiếu HĐ']);
@@ -411,6 +490,15 @@
   Object.assign(App.actions, {
     dcP(p) { const f = filt(); f.p = p; if (p === 'tuy' && !f.from) { const r = range('thang'); f.from = r[0]; f.to = r[1]; } draw(document.getElementById('screen'), App._dcScope); },
     dcTab(t) { filt().tab = t; draw(document.getElementById('screen'), App._dcScope); },
+    async dcRemind(arg) {
+      const [o, id] = arg.split('|'); const d = (App._dcScope.docs || []).find((x) => x._owner === o && x.id === id); if (!d) return;
+      if (await F().remind(o, d)) App.toast('Đã nhắc ' + d._ownerName + ' hoàn ứng ' + d.soPhieu, 'ok');
+    },
+    async dcRemindAll() {
+      const late = (App._dcR ? App._dcR.tus : []).filter((x) => x.k === 'open' && x.days > 15);
+      let n = 0; for (const x of late) { if (await F().remind(x.o, x.tu)) n++; }
+      App.toast(n ? 'Đã gửi nhắc ' + n + ' nhân sự' : 'Hôm nay đã nhắc hết rồi', n ? 'ok' : 'err');
+    },
     async dcExcel() { if (!App._dcR) return; App.toast('Đang tạo Excel…'); try { await excel(App._dcR); } catch (e) { console.error(e); App.toast('Lỗi Excel: ' + (e.message || e), 'err'); } },
     async dcWord() { if (!App._dcR) return; App.toast('Đang tạo Word…'); try { await word(App._dcR); } catch (e) { console.error(e); App.toast('Lỗi Word: ' + (e.message || e), 'err'); } },
     async dcPdf() { if (!App._dcR) return; App.toast('Đang tạo PDF…'); const b = await pdf(App._dcR); if (b) { U.saveBlob(b, fileBase(App._dcR) + '.pdf'); App.toast('Đã tạo PDF', 'ok'); } },

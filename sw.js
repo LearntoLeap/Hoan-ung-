@@ -5,7 +5,7 @@
    - Thư viện / ảnh: dùng bản đã lưu (đổi VERSION khi thay thư viện).
    Đổi VERSION ở mỗi lần phát hành để xoá cache cũ. */
 'use strict';
-const VERSION = 'ltl-v26';
+const VERSION = 'ltl-v27';
 const CORE = 'ltl-core-' + VERSION;
 
 const SHELL = [
@@ -29,6 +29,7 @@ const SHELL = [
   './assets/review.js',
   './assets/ledger.js',
   './assets/pdf.js',
+  './assets/dm.js',
   './assets/demo.js',
   './assets/cloud.js',
   './assets/logo-mark.png',

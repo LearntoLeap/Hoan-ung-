@@ -101,6 +101,7 @@
     { r: 'doi-chieu', label: 'Đối chiếu & sổ', ic: 'book' },
     { r: 'bao-cao', label: 'Báo cáo chi phí', ic: 'chart' },
     { r: 'duyet', label: 'Duyệt chứng từ', ic: 'inbox', admin: true, cnt: 'duyet-cnt' },
+    { r: 'tin-nhan', label: 'Tin nhắn', ic: 'chat', cnt: 'dm-cnt' },
     { r: 'tai-khoan', label: 'Thành viên & quyền', ic: 'users', admin: true },
   ];
   const MENU_MORE = [
@@ -353,16 +354,23 @@
   };
   window.addEventListener('hashchange', () => { if (App.user) go(); });
 
+  let goSeq = 0;
   async function go() {
+    const my = ++goSeq;
     App.route = parseHash();
     closeMenus();
     try { await loadData(); } catch (e) { toast('Không đọc được dữ liệu: ' + e.message, 'err'); }
+    if (my !== goSeq) return;          // đã có lần chuyển trang mới hơn — bỏ lần này
+    App.route = parseHash();
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
     // tab đang ẩn (chạy nền): bỏ hiệu ứng chuyển cảnh để chắc chắn trang được vẽ lại
     if (document.startViewTransition && !reduce && document.getElementById('screen') && document.visibilityState === 'visible') {
-      const vt = document.startViewTransition(() => { render(true); window.scrollTo(0, 0); });
-      // chuyển trang liên tiếp / tab ẩn: hiệu ứng có thể bị bỏ qua — không phải lỗi
+      // hiệu ứng có thể bị trình duyệt bỏ qua (chuyển trang liên tiếp…) mà không gọi hàm vẽ → luôn có dự phòng
+      let done = false;
+      const draw = () => { if (done || my !== goSeq) return; done = true; render(true); window.scrollTo(0, 0); };
+      const vt = document.startViewTransition(draw);
       [vt.ready, vt.finished, vt.updateCallbackDone].forEach((p) => p && p.catch(() => {}));
+      setTimeout(draw, 350);
     } else { render(true); window.scrollTo(0, 0); }
   }
   App.go = go;
@@ -395,6 +403,7 @@
     { label: 'Kế toán', items: ['duyet', 'tai-khoan'] },
     { label: 'Chứng từ', items: ['', 'tam-ung', 'chi-tieu', 'hoan-ung', 'thanh-toan', 'su-kien'] },
     { label: 'Báo cáo', items: ['doi-chieu', 'bao-cao'] },
+    { label: 'Trao đổi', items: ['tin-nhan'] },
     { label: 'Tài khoản', items: ['ca-nhan', 'thung-rac', 'cai-dat', 'huong-dan'] },
   ];
   const ALL = MENU.concat(MENU_MORE);

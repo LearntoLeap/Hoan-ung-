@@ -92,13 +92,18 @@
   function memMenu(id) {
     const p = (App._members || []).find((x) => x.id === id); if (!p) return;
     const me = F().myId(), self = p.id === me;
+    const card = (k, ic, t, d, danger) => '<div class="menu-item" data-mm="' + k + '"><div class="mic"' + (danger ? ' style="background:hsl(var(--nguy-hiem)/.1);color:hsl(var(--nguy-hiem-dam))"' : '') + '>' + I(ic) + '</div><div><div class="mt">' + t + '</div><div class="ms">' + d + '</div></div></div>';
     const ov = App.openSheet(App.sheetHead(p.full_name || p.email, (p.email || '') + ' · ' + F().ROLES[p.role || 'staff'].t) +
-      '<div class="field"><label>Vai trò</label><div class="seg" id="mm-role">' + ['staff', 'ketoan', 'admin'].map((r) => '<button class="' + ((p.role || 'staff') === r ? 'on' : '') + '" data-r="' + r + '"' + (self ? ' disabled' : '') + '>' + F().ROLES[r].t + '</button>').join('') + '</div>' +
+      '<div class="mm-sheet"><div class="field"><label>Vai trò</label><div class="seg" id="mm-role">' + ['staff', 'ketoan', 'admin'].map((r) => '<button class="' + ((p.role || 'staff') === r ? 'on' : '') + '" data-r="' + r + '"' + (self ? ' disabled' : '') + '>' + F().ROLES[r].t + '</button>').join('') + '</div>' +
       '<div class="hint">' + (self ? 'Không tự đổi vai trò của chính mình (tránh mất quyền).' : 'Nhân sự: chỉ dữ liệu của mình · Kế toán / Quản trị: xem tất cả, duyệt, quản lý thành viên.') + '</div></div>' +
-      '<div class="menu-item" data-mm="pw"><div class="mic">' + I('key') + '</div><div><div class="mt">Cấp lại mật khẩu</div><div class="ms">Đặt mật khẩu tạm, gửi cho nhân sự qua Zalo — nhắc đổi lại sau khi đăng nhập</div></div></div>' +
-      '<div class="menu-item" data-mm="mail"><div class="mic">' + I('send') + '</div><div><div class="mt">Gửi email đặt lại mật khẩu</div><div class="ms">Nhân sự tự đặt mật khẩu mới qua liên kết trong email</div></div></div>' +
-      (self ? '' : '<div class="menu-item" data-mm="block"><div class="mic" style="' + (p.blocked ? '' : 'background:hsl(var(--nguy-hiem)/.1);color:hsl(var(--nguy-hiem-dam))') + '">' + I(p.blocked ? 'unlock' : 'lock') + '</div><div><div class="mt">' + (p.blocked ? 'Mở khoá tài khoản' : 'Khoá tài khoản') + '</div><div class="ms">' + (p.blocked ? 'Cho phép ghi dữ liệu trở lại' : 'Tài khoản không thêm / sửa được dữ liệu (vẫn giữ lịch sử)') + '</div></div></div>') +
-      '<a class="menu-item" href="#/tai-khoan/' + esc(p.id) + '" style="color:inherit;text-decoration:none"><div class="mic">' + I('eye') + '</div><div><div class="mt">Xem dữ liệu</div><div class="ms">Phiếu, khoản chi, sự kiện (chỉ đọc)</div></div></a>', { center: true });
+      '<div class="mm-grid">' +
+      card('pw', 'key', 'Cấp lại mật khẩu', 'Đặt mật khẩu tạm, gửi qua Zalo') +
+      card('mail', 'send', 'Email đặt lại mật khẩu', 'Tự đặt lại qua liên kết email') +
+      '<a class="menu-item" href="#/tai-khoan/' + esc(p.id) + '"><div class="mic">' + I('eye') + '</div><div><div class="mt">Xem dữ liệu</div><div class="ms">Phiếu, khoản chi, sự kiện</div></div></a>' +
+      '<a class="menu-item" href="#/tin-nhan/' + esc(p.id) + '"><div class="mic">' + I('chat') + '</div><div><div class="mt">Nhắn tin riêng</div><div class="ms">Chỉ hai người thấy</div></div></a>' +
+      (self ? '' : card('block', p.blocked ? 'unlock' : 'lock', p.blocked ? 'Mở khoá tài khoản' : 'Khoá tài khoản', p.blocked ? 'Cho ghi dữ liệu trở lại' : 'Không thêm / sửa được dữ liệu', !p.blocked) +
+        card('del', 'trash', 'Xoá hẳn tài khoản', 'Xoá vĩnh viễn tài khoản và dữ liệu', true)) +
+      '</div></div>', { center: true });
     ov.addEventListener('click', async (e) => {
       if (e.target.closest('a.menu-item')) { App.closeSheet(ov); return; }
       const rb = e.target.closest('#mm-role button[data-r]');
@@ -120,6 +125,17 @@
           try { await F().B().setBlocked(p.id, !p.blocked); App.toast(p.blocked ? 'Đã mở khoá' : 'Đã khoá tài khoản', 'ok'); F().invalidate(); listView(document.getElementById('screen'), true); }
           catch (er) { App.toast('Lỗi: ' + (er.message || er), 'err'); }
         }, !p.blocked, p.blocked ? 'Mở khoá' : 'Khoá');
+      } else if (k === 'del') {
+        App.closeSheet(ov);
+        const ov2 = App.openSheet(App.sheetHead('Xoá hẳn tài khoản?', (p.full_name || '') + ' · ' + (p.email || '')) +
+          '<div class="alert danger">' + I('alert') + '<div>Tài khoản, toàn bộ phiếu, khoản chi, ảnh chứng từ, tin nhắn và thông báo của người này sẽ bị <b>xoá vĩnh viễn, không khôi phục được</b>. Nên xuất báo cáo / Excel trước khi xoá.</div></div>' +
+          App.ui.text('del-cf', 'Gõ XOA để xác nhận', '', { ph: 'XOA' }) +
+          '<div class="sheet-f"><button class="btn out" data-act="closeTop">Huỷ</button><button class="btn danger" id="del-ok">' + I('trash') + 'Xoá vĩnh viễn</button></div>', { center: true });
+        ov2.querySelector('#del-ok').onclick = async () => {
+          if (U.normText(App.val('del-cf')) !== 'xoa') { App.toast('Gõ XOA để xác nhận', 'err'); return; }
+          try { await F().B().deleteUser(p.id); App.closeSheet(ov2); App.toast('Đã xoá hẳn tài khoản ' + (p.full_name || p.email), 'ok'); F().invalidate(); listView(document.getElementById('screen'), true); }
+          catch (er) { App.toast('Lỗi: ' + (er.message || er), 'err'); }
+        };
       }
     });
   }

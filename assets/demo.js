@@ -30,8 +30,8 @@
     open() {
       if (S.db) return Promise.resolve(S.db);
       return new Promise((res, rej) => {
-        const r = indexedDB.open('ltl_demo_srv', 1);
-        r.onupgradeneeded = () => { const d = r.result; ['rec', 'rev', 'msg', 'ntf', 'prof'].forEach((s) => { if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath: 'k' }); }); };
+        const r = indexedDB.open('ltl_demo_srv', 2);
+        r.onupgradeneeded = () => { const d = r.result; ['rec', 'rev', 'msg', 'ntf', 'prof', 'dm'].forEach((s) => { if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath: 'k' }); }); };
         r.onsuccess = () => { S.db = r.result; res(S.db); };
         r.onerror = () => rej(r.error);
       });
@@ -48,7 +48,7 @@
     get: (s, k) => S.run(s, 'readonly', (os) => os.get(k)),
     put: (s, v) => S.run(s, 'readwrite', (os) => os.put(v)),
     del: (s, k) => S.run(s, 'readwrite', (os) => os.delete(k)),
-    async clear() { for (const s of ['rec', 'rev', 'msg', 'ntf', 'prof']) await S.run(s, 'readwrite', (os) => os.clear()); },
+    async clear() { for (const s of ['rec', 'rev', 'msg', 'ntf', 'prof', 'dm']) await S.run(s, 'readwrite', (os) => os.clear()); },
   };
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const me = () => (App.cloud.user || {}).id;
@@ -87,6 +87,19 @@
       (await S.all('rec')).forEach((r) => { if (r.owner !== u && r.kind !== 'image') rows.push({ owner: r.owner, id: r.id, kind: r.kind, updated_at: (r.data && r.data.updatedAt) || '', data: r.data }); });
       for (const st of ['docs', 'events', 'expenses', 'settings']) (await DB.all(st)).forEach((rec) => rows.push({ owner: u, id: rec.id, kind: STORES[st], updated_at: rec.updatedAt || '', data: rec }));
       return rows;
+    },
+    async contacts() {
+      const acc = isAcc(), u = me();
+      return (await S.all('prof')).filter((p) => p.id !== u && (acc || p.role === 'admin' || p.role === 'ketoan')).map((p) => ({ id: p.id, full_name: p.full_name, email: p.email, dept: p.dept, role: p.role }));
+    },
+    async dms() { const u = me(); return (await S.all('dm')).filter((m) => m.from_user === u || m.to_user === u).map(strip); },
+    async dmSend(m) { await S.put('dm', Object.assign({ k: m.id }, clone(m))); },
+    async deleteUser(uid) {
+      if (uid === me()) throw new Error('Không tự xoá chính mình');
+      await S.del('prof', uid);
+      for (const st of ['rec', 'rev', 'msg']) for (const x of await S.all(st)) if (x.owner === uid) await S.del(st, x.k);
+      for (const x of await S.all('ntf')) if (x.to_user === uid || x.author === uid) await S.del('ntf', x.k);
+      for (const x of await S.all('dm')) if (x.from_user === uid || x.to_user === uid) await S.del('dm', x.k);
     },
     async docImages(owner, doc) {
       if (owner === me()) return App.data.images;
@@ -333,6 +346,10 @@
       items: [{ noiDung: 'In catalogue 200 cuốn', soLuong: 200, donGia: 6000, hd: 'vat', ghiChu: 'HĐ VAT số 0000456' }, { noiDung: 'Phí ship catalogue', donGia: 50000, hd: 'bill' }] });
     await sentN(B, tt3, ts(0, 6, 14));
     await mkDoc(B, 'TU', { ngay: iso(0, 9), nd: 'Tạm ứng đi công tác Đà Nẵng', md: 'Hội thảo STEM miền Trung', items: [{ noiDung: 'Vé máy bay khứ hồi', donGia: 2600000 }, { noiDung: 'Lưu trú 2 đêm', soLuong: 2, donGia: 700000 }] });
+    const dm = async (from, to, text, at) => { const m = { id: U.uid(), at, from_user: from, to_user: to, data: { text, name: U_[from].full_name, role: U_[from].role } }; await S.put('dm', Object.assign({ k: m.id }, m)); };
+    await dm(A, KT.id, 'Chị Thảo ơi, khoản thuê xe đi Bắc Ninh em lấy hoá đơn VAT tên công ty được không ạ?', ts(-2, 6, 9));
+    await dm(KT.id, A, 'Được em, ghi đúng tên + MST công ty như trên phiếu nhé. Chụp ảnh gửi kèm phiếu hoàn ứng.', ts(-2, 6, 10));
+    await dm(B, 'demo-admin', 'Em đề xuất bổ sung mục chi tiếp khách vào quy định tạm ứng ạ.', ts(0, 7, 15));
     await ntf(B, KT.id, 'Kế toán đã DUYỆT CHI DNTU ' + tu4.soPhieu, 'Nhớ lập phiếu hoàn ứng kèm hoá đơn sau chuyến đi', '#/phieu/' + tu4.id, ts(-1, 4, 9), 'decide');
   }
 

@@ -107,6 +107,10 @@
       catch (e) { await q(C().from('ltl_profiles').update({ last_seen: U.nowISO() }).eq('id', Flow.myId())); }
     },
     async allRecords() { return CL().admin.allData(); },
+    async contacts() { return (await q(C().rpc('ltl_contacts'))) || []; },
+    async dms() { return pagedQ(() => C().from('ltl_dm').select('id,at,from_user,to_user,data').order('at')); },
+    async dmSend(m) { await q(C().from('ltl_dm').insert(m)); },
+    async deleteUser(uid) { await q(C().rpc('ltl_delete_user', { p_user: uid })); },
     async docImages(owner, doc) {
       const conv = async (rows) => {
         const out = [];
@@ -345,6 +349,71 @@
     Flow.invalidate();
   };
 
+  /* ---- minh chứng chi tiền của kế toán (ảnh bill CK, uỷ nhiệm chi, PDF…) ---- */
+  async function fileToData(f) {
+    const t = f.type || '';
+    if (/^image\//.test(t)) return { name: f.name || 'anh.jpg', type: 'image/jpeg', data: await smallDataURL(f) };
+    if (f.size > 1.5 * 1024 * 1024) throw new Error('Tệp ' + (f.name || '') + ' lớn hơn 1,5MB — hãy chụp ảnh hoặc nén lại');
+    const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(f); });
+    return { name: f.name || 'tep', type: t || 'application/octet-stream', data };
+  }
+  Flow.addProof = async function (owner, doc, files, note) {
+    const out = [];
+    for (const f of files || []) {
+      const x = await fileToData(f);
+      out.push(await Flow.addMsg(owner, doc, { kind: 'proof', text: note || ('Minh chứng chi: ' + x.name), file: x.type.indexOf('image/') === 0 ? null : x, img: x.type.indexOf('image/') === 0 ? x.data : null, fname: x.name }));
+    }
+    if (!files || !files.length) { if (note) out.push(await Flow.addMsg(owner, doc, { kind: 'proof', text: note })); }
+    if (out.length) {
+      await Flow.log(owner, doc, 'Kế toán đính kèm minh chứng chi', [out.length + ' mục' + (note ? ' · ' + note : '')]);
+      if (owner !== Flow.myId()) await Flow.notify(owner, { title: 'Kế toán đã đính kèm minh chứng chi tiền cho ' + Flow.docLabel(doc), body: note || 'Bill chuyển khoản / uỷ nhiệm chi', link: docLink(owner, doc, false), owner, docId: doc.id, kind: 'decide' });
+    }
+    return out;
+  };
+  // hồ sơ đã xong hết (chứng từ, hoá đơn, tiền) → chuyển sang "Đã hoàn tất" để kế toán đỡ rối
+  Flow.isDone = (doc, owner) => !!((Flow.reviewOf(doc, owner) || {}).done);
+  Flow.markDone = async function (owner, doc, done) {
+    const r = Object.assign({}, Flow.reviewOf(doc, owner) || {});
+    r.done = done ? { at: U.nowISO(), by: Flow.myId(), byName: Flow.myName() } : null;
+    await Flow.B().putReview(owner, doc.id, r);
+    Flow.rev[Flow.key(owner, doc.id)] = r;
+    await Flow.log(owner, doc, done ? 'Xác nhận hoàn tất hồ sơ' : 'Mở lại hồ sơ (bỏ hoàn tất)', []);
+    Flow.invalidate();
+  };
+  // chi vượt tạm ứng: kế toán xác nhận công ty đã chuyển trả nhân sự (khi không qua DNTT)
+  Flow.confirmTopup = async function (owner, hu, o) {
+    const r = Object.assign({}, Flow.reviewOf(hu, owner) || {});
+    r.topup = { ok: true, at: o.date || U.todayISO(), ref: o.ref || '', amount: o.amount, by: Flow.myId(), byName: Flow.myName() };
+    await Flow.B().putReview(owner, hu.id, r);
+    Flow.rev[Flow.key(owner, hu.id)] = r;
+    await Flow.log(owner, hu, 'Xác nhận công ty đã chi bù', [money(o.amount) + ' · ngày ' + U.fmtDate(r.topup.at) + (o.ref ? ' · Mã GD ' + o.ref : '')]);
+    await Flow.notify(owner, { title: 'Công ty đã chuyển bù ' + money(o.amount) + ' cho bạn', body: Flow.docLabel(hu) + ' đã tất toán', link: docLink(owner, hu, false), owner, docId: hu.id, kind: 'decide' });
+    Flow.invalidate();
+  };
+  // nhắc qua lại (giới hạn 1 lần / phiếu / ngày)
+  function once(key) {
+    const k = 'ltl_once_' + Flow.myId() + '_' + key + '_' + U.todayISO();
+    try { if (localStorage.getItem(k)) return false; localStorage.setItem(k, '1'); } catch (e) {}
+    return true;
+  }
+  Flow.remind = async function (owner, doc, text) {
+    if (!once('r' + doc.id)) { App.toast('Hôm nay đã nhắc phiếu này rồi', 'err'); return false; }
+    const t = text || ('Nhắc: ' + Flow.docLabel(doc) + ' chưa hoàn ứng — vui lòng lập phiếu hoàn ứng kèm hoá đơn, bảng kê.');
+    await Flow.addMsg(owner, doc, { kind: 'yc', text: t });
+    await Flow.notify(owner, { title: 'Kế toán nhắc: ' + Flow.docLabel(doc), body: t, link: docLink(owner, doc, false), owner, docId: doc.id, kind: 'msg' });
+    return true;
+  };
+  Flow.nudge = async function (doc) {
+    if (!once('n' + doc.id)) { App.toast('Hôm nay bạn đã nhắc kế toán về phiếu này', 'err'); return false; }
+    const me = Flow.myId(), s = Flow.status(doc);
+    const t = 'Nhờ kế toán ' + (s === 'da-duyet' ? 'lên lệnh chi' : 'xem và duyệt') + ' giúp ' + Flow.docLabel(doc) + ' (' + money(App.Docs.total(doc)) + ').';
+    await Flow.addMsg(me, doc, { kind: 'msg', text: t });
+    await Flow.notify('acc', { title: Flow.myName() + ' nhắc: ' + Flow.docLabel(doc), body: t, link: docLink(me, doc, true), owner: me, docId: doc.id, kind: 'msg' });
+    App.toast('Đã nhắc kế toán', 'ok');
+    if (thr && thr.doc.id === doc.id) Flow.loadThread(me, doc);
+    return true;
+  };
+
   /* ============================== Dữ liệu toàn công ty (kế toán) ============================== */
   Flow.invalidate = () => { if (Flow.all) Flow.all.at = 0; };
   Flow.loadAll = async function (force) {
@@ -408,9 +477,10 @@
         if (rv.refund && rv.refund.ok) { k = 'refunded'; label = 'Đã nộp lại ' + money(diff); cls = 'ok'; }
         else if (refBy[k2(o, hu.id)]) { k = 'refund-wait'; label = 'Chờ KT xác nhận nộp lại ' + money(diff); cls = 'accent'; }
         else { k = 'refund-due'; label = 'Phải nộp lại ' + money(diff); cls = 'warn'; }
-      } else if (!tt) { k = 'topup-due'; label = 'Chi vượt ' + money(-diff) + ' – chưa lập DNTT bù'; cls = 'warn'; }
+      } else if (rv.topup && rv.topup.ok) { k = 'topup-done'; label = 'Công ty đã chi bù ' + money(-diff); cls = 'ok'; }
+      else if (!tt) { k = 'topup-due'; label = 'Chi vượt ' + money(-diff) + ' – công ty cần chi bù'; cls = 'warn'; }
       else { const ts = st(tt); k = ts === 'da-chi' ? 'topup-done' : 'topup-pending'; label = (ts === 'da-chi' ? 'Đã chi bù ' : 'DNTT bù ' + ST[ts].s.toLowerCase() + ' ') + money(-diff); cls = ts === 'da-chi' ? 'ok' : 'primary'; }
-      return { hu, tu, o, adv, spent, diff, hs, k, label, cls, tt, refund: rv.refund || null, refundReport: refBy[k2(o, hu.id)] || null, done: ['ok', 'refunded', 'topup-done'].includes(k) };
+      return { hu, tu, o, adv, spent, diff, hs, k, label, cls, tt, refund: rv.refund || null, topup: rv.topup || null, refundReport: refBy[k2(o, hu.id)] || null, done: ['ok', 'refunded', 'topup-done'].includes(k) };
     };
 
     const tus = docs.filter((d) => d.type === 'TU').map((tu) => {
@@ -455,6 +525,8 @@
         const x = huInfo(d);
         ledger.push(Object.assign({}, base, { date: d.ngayLap, amount: x.spent, dir: 'qt', desc: d.noiDung || '', ref: '', cat: 'Hoàn ứng – quyết toán tạm ứng',
           note: 'Quyết toán ' + (d.tuSoPhieu || '') + ': ứng ' + U.groupThousand(x.adv) + ' · thực chi ' + U.groupThousand(x.spent), follow: x.label }));
+        if (x.topup && x.topup.ok) ledger.push(Object.assign({}, base, { date: x.topup.at, amount: -x.diff, dir: 'chi', desc: 'Công ty chi bù vượt tạm ứng ' + (d.tuSoPhieu || ''), ref: x.topup.ref || '', cat: 'Chi bù hoàn ứng',
+          note: 'Kế toán xác nhận đã chuyển trả nhân sự', follow: 'Đã tất toán' }));
         if (x.refund && x.refund.ok) ledger.push(Object.assign({}, base, { date: x.refund.at, amount: x.diff, dir: 'thu', desc: 'Nộp lại tạm ứng thừa ' + (d.tuSoPhieu || ''), ref: x.refund.ref || '', cat: 'Thu hồi tạm ứng thừa',
           note: 'Kế toán xác nhận đã nhận về TK công ty', follow: 'Đã tất toán' }));
       } else {
@@ -481,6 +553,12 @@
         if (rw.length) out.push({ ic: 'wallet', lv: 'accent', t: rw.length + ' khoản nộp lại chờ xác nhận', s: rw.map((x) => x.hu._ownerName + ' ' + money(x.diff)).slice(0, 3).join(' · '), link: '#/doi-chieu?tab=tu' });
         const open = a.tus.filter((x) => x.k === 'open' && x.days > 30);
         if (open.length) out.push({ ic: 'alert', lv: 'danger', t: open.length + ' tạm ứng quá 30 ngày chưa hoàn ứng', s: open.map((x) => x.tu._ownerName).slice(0, 3).join(', '), link: '#/doi-chieu?tab=tu' });
+        const appr = all.docs.filter((d) => d.type !== 'HU' && Flow.status(d, d._owner) === 'da-duyet');
+        if (appr.length) out.push({ ic: 'lock', lv: 'warn', t: appr.length + ' phiếu đã duyệt nhưng chưa chi (chưa lên lệnh)', s: appr.map((d) => d.soPhieu + ' · ' + d._ownerName).slice(0, 3).join(' · '), link: '#/duyet?tab=da-duyet' });
+        const top = a.hus.filter((x) => x.k === 'topup-due' || x.k === 'topup-pending');
+        if (top.length) out.push({ ic: 'calc', lv: 'warn', t: 'Công ty cần chi bù ' + top.length + ' khoản cho nhân sự', s: top.map((x) => x.hu._ownerName + ' ' + money(-x.diff)).slice(0, 3).join(' · '), link: '#/doi-chieu?tab=tu' });
+        const late = a.tus.filter((x) => x.k === 'open' && x.days > 15 && x.days <= 30);
+        if (late.length) out.push({ ic: 'clock', lv: 'warn', t: late.length + ' tạm ứng quá 15 ngày chưa hoàn ứng', s: 'Bấm “Nhắc” để gửi thông báo cho nhân sự', link: '#/doi-chieu?tab=tu' });
         const miss = a.lines.filter((x) => x.hd === 'chua' || x.hd === '');
         if (miss.length) out.push({ ic: 'receipt', lv: 'warn', t: miss.length + ' dòng chi chưa có hoá đơn', s: 'Theo dõi bù hoá đơn', link: '#/doi-chieu?tab=hd' });
       }
@@ -496,6 +574,8 @@
       a.tus.filter((x) => x.k === 'open').forEach((x) => out.push({ ic: 'wallet', lv: x.days > 30 ? 'danger' : 'warn', t: 'Tạm ứng ' + x.tu.soPhieu + ' chưa hoàn ứng', s: money(x.adv) + (x.days ? ' · đã ' + x.days + ' ngày' : ''), link: '#/phieu/moi/HU?from=' + x.tu.id }));
       a.hus.filter((x) => x.k === 'refund-due').forEach((x) => out.push({ ic: 'wallet', lv: 'warn', t: 'Nộp lại ' + money(x.diff) + ' về TK công ty', s: 'Theo phiếu ' + x.hu.soPhieu, link: '#/phieu/' + x.hu.id }));
       a.hus.filter((x) => x.k === 'topup-due').forEach((x) => out.push({ ic: 'calc', lv: 'warn', t: 'Lập DNTT bù ' + money(-x.diff), s: 'Chi vượt tạm ứng ở ' + x.hu.soPhieu, link: '#/phieu/moi/TT?bu=' + x.hu.id }));
+      docs.filter((d) => Flow.status(d) === 'cho-duyet' && d.submittedAt && Date.now() - Date.parse(d.submittedAt) > 3 * 864e5).forEach((d) =>
+        out.push({ ic: 'bell', lv: 'accent', t: d.soPhieu + ' chờ duyệt đã ' + Math.floor((Date.now() - Date.parse(d.submittedAt)) / 864e5) + ' ngày', s: 'Mở phiếu → “Nhắc kế toán” hoặc nhắn tin', link: '#/phieu/' + d.id }));
       const drafts = docs.filter((d) => Flow.status(d) === 'nhap').length;
       if (drafts) out.push({ ic: 'edit', lv: 'out', t: drafts + ' phiếu nháp chưa gửi duyệt', s: 'Gửi kế toán khi đã đủ chứng từ', link: '#/' });
       if (day >= 25) out.push({ ic: 'calendar', lv: 'accent', t: 'Cuối ' + mLabel(today) + ': hoàn tất chứng từ', s: 'Gửi hoàn ứng, bổ sung hoá đơn trước khi chốt sổ', link: '#/doi-chieu' });
@@ -534,6 +614,7 @@
     const n = Flow.unread(), b = document.getElementById('bell-n');
     if (b) { b.textContent = n > 99 ? '99+' : String(n); b.hidden = !n; }
     setBadge(n);
+    if (App.dmUpdateBadge) App.dmUpdateBadge();
     const c = document.getElementById('duyet-cnt');
     if (c && Flow.isAcc()) { const p = Flow.pendingCount(); c.textContent = p || ''; c.hidden = !p; }
   }
@@ -554,7 +635,7 @@
     const list = Flow.notifs.slice(0, 60).map((n) => {
       const d = n.data || {};
       return '<a class="nt-it' + (n.at > r ? ' new' : '') + '" href="' + esc(d.link || '#/') + '" data-act="bellGo"><span class="nt-ic ' + (d.kind === 'decide' ? 'ok' : d.kind === 'refund' ? 'accent' : 'primary') + '">' +
-        I(d.kind === 'msg' ? 'chat' : d.kind === 'decide' ? 'check' : d.kind === 'refund' ? 'wallet' : 'bell', 16) + '</span><span class="nt-b"><b>' + esc(d.title || '') + '</b><small>' + esc(d.body || '') + '</small><i>' + esc(Flow.ago(n.at)) + '</i></span></a>';
+        I(d.kind === 'msg' || d.kind === 'dm' ? 'chat' : d.kind === 'decide' ? 'check' : d.kind === 'refund' ? 'wallet' : 'bell', 16) + '</span><span class="nt-b"><b>' + esc(d.title || '') + '</b><small>' + esc(d.body || '') + '</small><i>' + esc(Flow.ago(n.at)) + '</i></span></a>';
     }).join('');
     return App.sheetHead('Thông báo', Flow.unread() ? Flow.unread() + ' thông báo mới' : 'Không có thông báo mới') + push + remH +
       '<div class="nt-sec">Thông báo' + (Flow.notifs.length ? '' : '') + '</div>' + (list || '<p class="muted" style="font-size:13px;margin:6px 0 0">Chưa có thông báo nào.</p>') +
@@ -653,7 +734,21 @@
     try { thr.msgs = (await Flow.B().msgs(owner, doc.id)) || []; }
     catch (e) { const b = document.getElementById('thr-body'); if (b) b.innerHTML = '<div class="alert warn">' + I('alert') + '<div>Chưa tải được trao đổi: ' + esc(e.message || e) + (CL().demo ? '' : '<br>Kiểm tra mạng hoặc chạy lại supabase/setup.sql.') + '</div></div>'; return; }
     paintThread();
+    paintProofs();
   };
+  function paintProofs() {
+    const box = document.getElementById('proof-box'); if (!box || !thr) return;
+    const pr = thr.msgs.filter((m) => (m.data || {}).kind === 'proof');
+    const acc = Flow.isAcc() && thr.owner !== Flow.myId();
+    if (!pr.length && !acc) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="card"><div class="card-h"><div class="t">' + I('receipt') + 'Minh chứng chi tiền của kế toán <span class="cnt0">' + pr.length + '</span></div>' +
+      (acc ? '<button class="btn sm out" data-act="proofAdd">' + I('upload') + 'Thêm minh chứng chi</button>' : '') + '</div><div class="card-b">' +
+      (pr.length ? '<div class="ev-grid">' + pr.map((m) => { const d = m.data || {};
+        return '<div class="pf-it">' + (d.img ? '<img src="' + esc(d.img) + '" alt="" data-act="proofView:' + esc(m.id) + '">' : '<a href="#" class="pf-file" data-act="proofView:' + esc(m.id) + '">' + I(d.file ? 'file' : 'chat', 22) + '<span>' + esc(d.fname || (d.file ? 'Tệp' : 'Ghi chú')) + '</span></a>') +
+          '<small>' + esc(d.text || '') + '<br><i>' + esc(d.name || '') + ' · ' + esc(U.fmtDateTime(m.at)) + '</i></small></div>'; }).join('') + '</div>'
+        : '<p class="muted" style="margin:0;font-size:13px">Sau khi chuyển khoản thành công, đính kèm bill chuyển khoản / uỷ nhiệm chi hoặc ghi chú để làm minh chứng sau này.</p>') + '</div></div>';
+  }
+  Flow.paintProofs = paintProofs;
   function lineRef(itemId) {
     if (!itemId || !thr) return '';
     const items = App.Docs.filledItems(thr.doc), i = items.findIndex((x) => x.id === itemId);
@@ -661,7 +756,7 @@
     const it = items[i];
     return '<div class="mref">' + I('list', 12) + 'Dòng ' + (i + 1) + ': ' + esc((it.noiDung || '').slice(0, 50)) + ' · ' + money(App.Docs.lineTotal(it)) + '</div>';
   }
-  const KIND = { yc: ['Yêu cầu giải trình', 'warn'], gt: ['Giải trình', 'ok'], refund: ['Báo đã nộp lại', 'accent'], msg: null };
+  const KIND = { yc: ['Yêu cầu / nhắc', 'warn'], gt: ['Giải trình', 'ok'], refund: ['Báo đã nộp lại', 'accent'], proof: ['Minh chứng chi', 'ok'], msg: null };
   function paintThread() {
     const b = document.getElementById('thr-body'); if (!b || !thr) return;
     const me = Flow.myId(), chat = thr.msgs.filter((m) => (m.data || {}).kind !== 'log'), logs = thr.msgs.filter((m) => (m.data || {}).kind === 'log');
@@ -746,7 +841,7 @@
       sheet.querySelectorAll('[data-evd]').forEach((b) => { b.onclick = async () => { await opts.onDel(b.getAttribute('data-evd')); refresh(); }; });
       sheet.querySelectorAll('[data-evf]').forEach((b) => { b.onclick = () => { const f = opts.imgs().find((x) => x.id === b.getAttribute('data-evf')); if (f && f.blob) U.saveBlob(f.blob, U.safeName(f.name || 'tep')); }; });
       const lib = sheet.querySelector('#ev-lib'), cam = sheet.querySelector('#ev-cam');
-      if (lib) lib.onclick = async () => { const fs = await App.pickFiles('image/*,application/pdf', true); if (fs.length) { await opts.onAdd(fs); refresh(); } };
+      if (lib) lib.onclick = async () => { const fs = await App.pickFiles(App.FILE_ACCEPT, true); if (fs.length) { await opts.onAdd(fs); refresh(); } };
       if (cam) cam.onclick = () => App.openCamera(async (blobs) => { await opts.onAdd(blobs); refresh(); });
     };
     const refresh = () => { sheet.innerHTML = '<div class="grip"></div>' + render(); bind(); };
@@ -754,9 +849,40 @@
     return ov;
   };
 
+  // sheet đính kèm minh chứng chi: ảnh (camera / thư viện), PDF, ghi chú
+  Flow.proofSheet = function (owner, doc, done) {
+    let files = [];
+    const ov = App.openSheet(App.sheetHead('Minh chứng chi tiền', Flow.docLabel(doc) + ' · ' + (doc._ownerName || doc.nguoiDeNghi || '')) +
+      App.ui.textarea('pf-note', 'Ghi chú (mã giao dịch, ngân hàng, nội dung CK…)', '', { rows: 2, ph: 'VD: CK Techcombank FT26314… ngày 10/11' }) +
+      '<div class="row" style="gap:8px"><button class="btn out sm" id="pf-cam">' + I('camera') + 'Chụp bill</button><button class="btn out sm" id="pf-lib">' + I('image') + 'Chọn ảnh / PDF</button><span id="pf-n" class="muted" style="font-size:12.5px"></span></div>' +
+      '<div class="sheet-f"><button class="btn out" data-act="closeTop">Bỏ qua</button><button class="btn" id="pf-ok">' + I('check') + 'Lưu minh chứng</button></div>', { center: true });
+    const n = () => { ov.querySelector('#pf-n').textContent = files.length ? files.length + ' tệp: ' + files.map((f) => f.name || 'ảnh').join(', ') : ''; };
+    ov.querySelector('#pf-cam').onclick = () => App.openCamera((b) => { files = files.concat(b.map((x, i) => (x.name ? x : new File([x], 'bill-' + (files.length + i + 1) + '.jpg', { type: 'image/jpeg' })))); n(); });
+    ov.querySelector('#pf-lib').onclick = async () => { const fs = await App.pickFiles('image/*,application/pdf', true); files = files.concat(fs); n(); };
+    ov.querySelector('#pf-ok').onclick = async () => {
+      const note = App.val('pf-note');
+      if (!files.length && !note) { App.toast('Chọn ảnh / tệp hoặc nhập ghi chú', 'err'); return; }
+      const btn = ov.querySelector('#pf-ok'); btn.disabled = true;
+      try { await Flow.addProof(owner, doc, files, note); App.closeSheet(ov); App.toast('Đã lưu minh chứng chi', 'ok'); if (done) done(); }
+      catch (e) { btn.disabled = false; App.toast(e.message || String(e), 'err'); }
+    };
+  };
+
   /* ============================== Actions ============================== */
   Object.assign(App.actions, {
     openBell() { App.openSheet(bellHTML(), { wide: false }); },
+    proofAdd() {
+      if (!thr) return;
+      const { owner, doc } = thr;
+      Flow.proofSheet(owner, doc, async () => { await Flow.loadThread(owner, doc); });
+    },
+    proofView(id) {
+      const m = thr && thr.msgs.find((x) => x.id === id); if (!m) return;
+      const d = m.data || {};
+      if (d.img) App.lightbox([{ url: d.img, kind: 'image', cap: d.text || '' }], 0);
+      else if (d.file && d.file.data) fetch(d.file.data).then((r) => r.blob()).then((b) => U.saveBlob(b, U.safeName(d.file.name || 'tep')));
+      else App.toast(d.text || '', 'ok');
+    },
     bellGo() { App.closeAllSheets(); },
     bellRead() {
       try { localStorage.setItem(RK(), Flow.notifs.length ? Flow.notifs[0].at : U.nowISO()); } catch (e) {}

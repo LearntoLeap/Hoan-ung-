@@ -259,11 +259,66 @@ grant execute on function public.ltl_set_role(text, text) to authenticated;
 grant execute on function public.ltl_set_blocked(uuid, boolean) to authenticated;
 grant execute on function public.ltl_admin_set_password(uuid, text) to authenticated;
 
--- 9) Thông báo tức thời (realtime) cho thông báo + trạng thái duyệt
+-- xoá hẳn tài khoản (và mọi dữ liệu của tài khoản đó)
+create or replace function public.ltl_delete_user(p_user uuid)
+returns void
+language plpgsql security definer
+set search_path = public, auth
+as $$
+begin
+  if not public.ltl_is_admin() then raise exception 'Không có quyền'; end if;
+  if p_user = auth.uid() then raise exception 'Không tự xoá chính mình'; end if;
+  delete from public.ltl_records where owner = p_user;
+  delete from public.ltl_reviews where owner = p_user;
+  delete from public.ltl_msgs where owner = p_user;
+  delete from public.ltl_notifs where to_user = p_user or author = p_user;
+  delete from public.ltl_dm where from_user = p_user or to_user = p_user;
+  delete from public.ltl_roles where lower(email) = (select lower(email) from auth.users where id = p_user);
+  delete from public.ltl_admins where lower(email) = (select lower(email) from auth.users where id = p_user);
+  delete from public.ltl_profiles where id = p_user;
+  delete from auth.users where id = p_user;
+end;
+$$;
+
+-- 8b) Tin nhắn riêng 1-1 (chỉ người gửi + người nhận thấy)
+create table if not exists public.ltl_dm (
+  id text primary key,
+  at timestamptz not null default now(),
+  from_user uuid not null default auth.uid(),
+  to_user uuid not null,
+  data jsonb not null default '{}'::jsonb
+);
+create index if not exists ltl_dm_pair on public.ltl_dm (from_user, to_user, at);
+create index if not exists ltl_dm_to on public.ltl_dm (to_user, at);
+alter table public.ltl_dm enable row level security;
+drop policy if exists "dm read" on public.ltl_dm;
+create policy "dm read" on public.ltl_dm for select using (from_user = auth.uid() or to_user = auth.uid());
+drop policy if exists "dm send" on public.ltl_dm;
+create policy "dm send" on public.ltl_dm for insert with check (from_user = auth.uid() and pg_column_size(data) < 2000000);
+-- danh bạ nhắn tin: nhân sự thấy ban giám đốc / kế toán / quản trị; kế toán / quản trị thấy tất cả
+create or replace function public.ltl_contacts()
+returns table (id uuid, full_name text, email text, dept text, role text)
+language sql stable security definer
+set search_path = public
+as $$
+  select p.id, p.full_name, p.email, p.dept, coalesce(r.role, 'staff') as role
+  from public.ltl_profiles p
+  left join public.ltl_roles r on lower(r.email) = lower(p.email)
+  where p.id <> auth.uid()
+    and (public.ltl_is_admin() or r.role in ('admin', 'ketoan'))
+    and not exists (select 1 from public.ltl_blocked b where b.user_id = p.id);
+$$;
+revoke all on function public.ltl_contacts() from public;
+revoke all on function public.ltl_delete_user(uuid) from public;
+grant execute on function public.ltl_contacts() to authenticated;
+grant execute on function public.ltl_delete_user(uuid) to authenticated;
+
+-- 9) Thông báo tức thời (realtime) cho thông báo + trạng thái duyệt + tin nhắn
 do $$
 begin
   begin alter publication supabase_realtime add table public.ltl_notifs; exception when others then null; end;
   begin alter publication supabase_realtime add table public.ltl_reviews; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.ltl_dm; exception when others then null; end;
 end $$;
 
 -- 10) TÀI KHOẢN CỐ ĐỊNH
