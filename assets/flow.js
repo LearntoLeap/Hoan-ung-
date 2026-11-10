@@ -398,10 +398,38 @@
   }
   Flow.remind = async function (owner, doc, text) {
     if (!once('r' + doc.id)) { App.toast('Hôm nay đã nhắc phiếu này rồi', 'err'); return false; }
-    const t = text || ('Nhắc: ' + Flow.docLabel(doc) + ' chưa hoàn ứng — vui lòng lập phiếu hoàn ứng kèm hoá đơn, bảng kê.');
+    const t = text || Flow.template('remindHU', doc);
     await Flow.addMsg(owner, doc, { kind: 'yc', text: t });
-    await Flow.notify(owner, { title: 'Kế toán nhắc: ' + Flow.docLabel(doc), body: t, link: docLink(owner, doc, false), owner, docId: doc.id, kind: 'msg' });
+    // gửi thêm tin nhắn riêng (chat) có gắn phiếu, để nhân sự thấy ngay trong mục Tin nhắn
+    try {
+      await Flow.B().dmSend({ id: U.uid(), at: U.nowISO(), from_user: Flow.myId(), to_user: owner, data: { text: t, ref: Flow.docRef(doc, owner), name: Flow.myName(), role: Flow.role() } });
+    } catch (e) { console.warn('dm remind', e); }
+    await Flow.notify(owner, { title: 'Kế toán nhắc hoàn ứng: ' + Flow.docLabel(doc), body: t, link: docLink(owner, doc, false), owner, docId: doc.id, kind: 'dm', dmFrom: Flow.myId() });
     return true;
+  };
+  // thẻ phiếu gắn trong tin nhắn (ảnh chụp thông tin lúc gửi)
+  Flow.docRef = (doc, owner) => ({ owner: owner || doc._owner || Flow.myId(), id: doc.id, type: doc.type, so: doc.soPhieu || '', total: App.Docs.total(doc), nd: (doc.noiDung || '').slice(0, 80), st: Flow.status(doc, owner || doc._owner), ngay: doc.ngayLap || '' });
+  // tin nhắn mẫu
+  Flow.TEMPLATES = {
+    remindHU: { t: 'Nhắc hoàn ứng', acc: true },
+    remindDoc: { t: 'Nhắc bổ sung chứng từ / hoá đơn', acc: true },
+    paid: { t: 'Báo đã chuyển tiền', acc: true },
+    approve: { t: 'Nhờ duyệt phiếu', acc: false },
+    pay: { t: 'Nhờ lên lệnh chi', acc: false },
+    ask: { t: 'Hỏi về phiếu', acc: false },
+  };
+  Flow.template = function (k, doc, name) {
+    const D = App.Docs, so = (doc && doc.soPhieu) || '', tien = doc ? money(D.total(doc)) : '';
+    const r = doc ? Flow.reviewOf(doc, doc._owner) || {} : {}, paid = r.paid || {};
+    const days = paid.at ? Math.floor((Date.now() - Date.parse(paid.at)) / 864e5) : 0;
+    const hi = 'Chào ' + (name || (doc && (doc._ownerName || doc.nguoiDeNghi)) || 'bạn') + ', ';
+    if (k === 'remindHU') return hi + 'tạm ứng ' + so + ' (' + tien + (paid.at ? ', chi ngày ' + U.fmtDate(paid.at) : '') + ')' + (days ? ' đã ' + days + ' ngày' : '') + ' chưa hoàn ứng. Bạn lập phiếu hoàn ứng (DNHU) kèm hoá đơn, bảng kê và nộp lại tiền thừa (nếu có) giúp kế toán nhé. Cảm ơn!';
+    if (k === 'remindDoc') return hi + 'phiếu ' + so + ' (' + tien + ') còn thiếu hoá đơn / chứng từ. Bạn chụp bổ sung ảnh chứng từ từng dòng giúp kế toán nhé.';
+    if (k === 'paid') return hi + 'kế toán đã chuyển ' + tien + ' cho phiếu ' + so + (paid.ref ? ' (mã GD ' + paid.ref + ')' : '') + '. Bạn kiểm tra tài khoản giúp nhé.';
+    if (k === 'approve') return 'Chị/anh kế toán ơi, nhờ xem và duyệt giúp em phiếu ' + so + ' (' + tien + ') ạ.';
+    if (k === 'pay') return 'Chị/anh kế toán ơi, phiếu ' + so + ' (' + tien + ') đã duyệt, nhờ lên lệnh chi giúp em ạ.';
+    if (k === 'ask') return 'Em muốn hỏi về phiếu ' + so + ' (' + tien + '): ';
+    return '';
   };
   Flow.nudge = async function (doc) {
     if (!once('n' + doc.id)) { App.toast('Hôm nay bạn đã nhắc kế toán về phiếu này', 'err'); return false; }
