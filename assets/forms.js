@@ -360,25 +360,46 @@
     d.mucDich = 'Quyết toán tạm ứng theo phiếu ' + tu.soPhieu;
     d.nguoiDeNghi = tu.nguoiDeNghi || d.nguoiDeNghi; d.boPhan = tu.boPhan || d.boPhan;
     d.tenTK = tu.tenTK || d.tenTK; d.soTK = tu.soTK || d.soTK; d.nganHang = tu.nganHang || d.nganHang;
-    if (d.eventId) importExpenses(d, d.eventId, true);
+    importExpenses(d, d.eventId, true);
   }
   // DNTT bù phần chi vượt tạm ứng của một phiếu hoàn ứng
   function prefillTopUp(d, huId) {
     const hu = App.data.docs.find((x) => x.id === huId); if (!hu) return;
     const st = Docs.settle(hu), diff = st.total - st.adv;
-    d.huDocId = hu.id; d.eventId = hu.eventId || null;
-    d.noiDung = 'Thanh toán chi bù vượt tạm ứng theo phiếu ' + hu.soPhieu;
+    d.huDocId = hu.id; d.eventId = hu.eventId || null; d.tuDocId = hu.tuDocId || null; d.tuSoPhieu = hu.tuSoPhieu || '';
+    d.noiDung = 'Thanh toán chi bù vượt tạm ứng ' + (hu.tuSoPhieu || '') + ' (theo phiếu ' + hu.soPhieu + ')';
+    d.deNghiKhac = 'Bù phần chi vượt của phiếu tạm ứng ' + (hu.tuSoPhieu || '?') + ' – quyết toán tại phiếu hoàn ứng ' + hu.soPhieu + ': đã ứng ' + U.groupThousand(st.adv) + ' đ, thực chi ' + U.groupThousand(st.total) + ' đ, chi vượt ' + U.groupThousand(diff) + ' đ.';
     d.mucDich = 'Chi vượt tạm ứng ' + (hu.tuSoPhieu || '') + ' (thực chi ' + U.groupThousand(st.total) + ' / đã ứng ' + U.groupThousand(st.adv) + ')';
     d.tenTK = hu.tenTK || d.tenTK; d.soTK = hu.soTK || d.soTK; d.nganHang = hu.nganHang || d.nganHang;
-    d.items = [Docs.blankItem({ noiDung: 'Chi bù vượt tạm ứng (theo ' + hu.soPhieu + ')', ngayChi: U.todayISO(), nguoiThamGia: (App.settings.tenNgan || lastName(App.settings.hoTen)), donGia: diff > 0 ? diff : 0, ghiChu: 'Hoá đơn / chứng từ đã nộp kèm phiếu ' + hu.soPhieu })];
+    d.items = [Docs.blankItem({ noiDung: 'Chi bù vượt tạm ứng ' + (hu.tuSoPhieu || '') + ' (theo ' + hu.soPhieu + ')', hd: 'vat', ngayChi: U.todayISO(), nguoiThamGia: (App.settings.tenNgan || lastName(App.settings.hoTen)), donGia: diff > 0 ? diff : 0, ghiChu: 'Hoá đơn / chứng từ đã nộp kèm phiếu ' + hu.soPhieu })];
   }
   function prefillCopy(d, srcId) {
     const src = App.data.docs.find((x) => x.id === srcId); if (!src) return;
     ['eventId', 'nguoiDeNghi', 'boPhan', 'noiDung', 'mucDich', 'tenTK', 'soTK', 'nganHang', 'deNghiKhac'].forEach((k) => { d[k] = src[k]; });
     d.items = (src.items || []).map((it) => Docs.blankItem(Object.assign({}, it, { id: U.uid() })));
   }
+  // khoản chi đã nằm trong phiếu hoàn ứng / thanh toán khác (tránh tính 2 lần)
+  function usedExpenseIds(exceptDocId) {
+    const s = new Set();
+    App.data.docs.forEach((x) => { if (x.id !== exceptDocId && x.type !== 'TU' && F().status(x) !== 'tu-choi') (x.items || []).forEach((it) => { if (it.expenseId) s.add(it.expenseId); }); });
+    return s;
+  }
+  // chọn đúng khoản chi cho phiếu: HU từ tạm ứng → khoản chi gắn tạm ứng đó; DNTT → khoản chi ngoài tạm ứng
+  Docs.expensesFor = function (d) {
+    const used = usedExpenseIds(d.id);
+    const free = (l) => l.filter((e) => !used.has(e.id));
+    if (d.type === 'HU' && d.tuDocId) {
+      const l = free(App.data.expenses.filter((e) => e.tuDocId === d.tuDocId));
+      if (l.length) return l;
+      return d.eventId ? free(App.expensesOf(d.eventId).filter((e) => !e.tuDocId)) : [];
+    }
+    if (!d.eventId) return [];
+    const ev = free(App.expensesOf(d.eventId));
+    if (d.type === 'TT') { const out = ev.filter((e) => !e.tuDocId); return out.length ? out : ev; }
+    return ev;
+  };
   function importExpenses(d, eventId, replaceIfEmpty) {
-    const exps = App.expensesOf(eventId);
+    const exps = Docs.expensesFor(Object.assign({}, d, { eventId: eventId || d.eventId }));
     if (!exps.length) return 0;
     const items = exps.map((e) => Docs.itemFromExpense(e, App.settings));
     if (replaceIfEmpty && !Docs.filledItems(d).length) d.items = items;
@@ -432,13 +453,13 @@
     const an = Fl.analyze({ docs: App.data.docs }); const x = an.hus.find((h) => h.hu.id === d.id) || {};
     if (st.adv > st.total) {
       const diff = st.adv - st.total;
-      return '<div class="alert ' + (x.k === 'refunded' ? 'ok' : 'warn') + ' mt12">' + I('wallet') + '<div style="flex:1"><b>Tạm ứng thừa ' + money(diff) + ' — nộp lại tài khoản công ty</b><br><span style="font-size:13px">TK nhận: ' + esc(App.settings.bankLine || '') + '<br>Nội dung CK gợi ý: <span class="mono">' + esc((d.nguoiDeNghi || '') + ' nop lai tam ung ' + (d.tuSoPhieu || '')) + '</span></span>' +
+      return '<div class="alert ' + (x.k === 'refunded' ? 'ok' : 'warn') + ' mt12">' + I('wallet') + '<div style="flex:1"><b>Tạm ứng ' + esc(d.tuSoPhieu || '') + ' thừa ' + money(diff) + ' — nộp lại tài khoản công ty</b><br><span style="font-size:13px">TK nhận: ' + esc(App.settings.bankLine || '') + '<br>Nội dung CK gợi ý: <span class="mono">' + esc((d.nguoiDeNghi || '') + ' nop lai tam ung ' + (d.tuSoPhieu || '')) + '</span></span>' +
         (x.k === 'refunded' ? '<div class="mt8"><span class="badge ok">' + I('check', 12) + 'Kế toán đã xác nhận nhận tiền ' + esc(U.fmtDate(x.refund.at)) + '</span></div>'
           : x.k === 'refund-wait' ? '<div class="mt8"><span class="badge accent">Đã báo nộp lại — chờ kế toán xác nhận</span></div>'
             : ok ? '<div class="mt8"><button class="btn sm" data-act="huRefund">' + I('send') + 'Báo đã nộp lại</button></div>' : '<div class="mt8 muted" style="font-size:12.5px">Sau khi kế toán duyệt phiếu, chuyển khoản rồi bấm “Báo đã nộp lại”.</div>') + '</div></div>';
     }
     const diff = st.total - st.adv, tt = x.tt;
-    return '<div class="alert ' + (tt ? 'info' : 'warn') + ' mt12">' + I('calc') + '<div style="flex:1"><b>Chi vượt tạm ứng ' + money(diff) + ' — lập Giấy đề nghị thanh toán (DNTT) bù</b><br><span style="font-size:13px">Kế toán theo dõi khoản bù qua phiếu DNTT gắn với phiếu hoàn ứng này.</span>' +
+    return '<div class="alert ' + (tt ? 'info' : 'warn') + ' mt12">' + I('calc') + '<div style="flex:1"><b>Chi vượt tạm ứng ' + esc(d.tuSoPhieu || '') + ' ' + money(diff) + ' — lập Giấy đề nghị thanh toán (DNTT) bù</b><br><span style="font-size:13px">Kế toán theo dõi khoản bù qua phiếu DNTT gắn với phiếu hoàn ứng này.</span>' +
       (tt ? '<div class="mt8">Đã lập: <a href="#/phieu/' + esc(tt.id) + '"><b>' + esc(tt.soPhieu) + '</b></a> ' + Fl.badge(tt, null, true) + '</div>'
         : '<div class="mt8"><a class="btn sm" href="#/phieu/moi/TT?bu=' + esc(d.id) + '">' + I('plus') + 'Lập DNTT bù ' + money(diff) + '</a></div>') + '</div></div>';
   }
@@ -484,7 +505,7 @@
       '<div class="sall">' + ui.eventPicker('d-event', 'Sự kiện / đợt chi', d.eventId) + '</div>' +
       '<div class="sall">' + ui.textarea('d-noiDung', 'Nội dung', d.noiDung, { rows: 2, req: true, ph: 'VD: Thanh toán phí vận chuyển' }) + '</div>' +
       '<div class="sall">' + ui.textarea('d-mucDich', 'Mục đích', d.mucDich, { rows: 2, ph: 'VD: Book xe chở sa bàn cho TH Bắc Hồng' }) + '</div>' +
-      '</div>' + (huParent ? '<div class="alert info mt8">' + I('link') + '<div>DNTT bù chi vượt tạm ứng của phiếu hoàn ứng <a href="#/phieu/' + esc(huParent.id) + '"><b>' + esc(huParent.soPhieu) + '</b></a>.</div></div>' : '') + '</div></div>' +
+      '</div>' + (huParent ? '<div class="alert info mt8">' + I('link') + '<div>DNTT <b>bù chi vượt</b> cho phiếu tạm ứng <b>' + esc(huParent.tuSoPhieu || '?') + '</b> (quyết toán tại phiếu hoàn ứng <a href="#/phieu/' + esc(huParent.id) + '"><b>' + esc(huParent.soPhieu) + '</b></a>) — chi vượt ' + money(Math.max(0, Docs.settle(huParent).total - Docs.settle(huParent).adv)) + '.</div></div>' : '') + '</div></div>' +
 
       // ---- Quyết toán (hoàn ứng)
       (d.type === 'HU' ? '<div class="card"><div class="card-h"><div class="t">' + I('wallet') + 'Quyết toán tạm ứng</div></div><div class="card-b"><div class="fgrid c2">' +
@@ -522,6 +543,7 @@
       '<div class="card"><div class="card-h"><div class="t">' + I('link') + 'Tệp đính kèm chung (hợp đồng, bảng kê…)</div></div><div class="card-b">' +
       App.renderAttachments(d.id, ro, isNew) + '</div></div>' +
 
+      (d.type === 'TU' && !isNew ? tuSpendBox(d) : '') +
       (d.type === 'TU' && !isNew ? '<div class="alert ' + (settledBy ? 'ok' : 'info') + '">' + I(settledBy ? 'check' : 'info') + '<div>' +
         (settledBy ? 'Phiếu này đã được quyết toán bằng phiếu hoàn ứng <a href="#/phieu/' + settledBy.id + '"><b>' + esc(settledBy.soPhieu) + '</b></a> ' + Fl.badge(settledBy, null, true) + '.'
           : st === 'da-chi' ? '<b>Tạm ứng đã được chi.</b> Sau khi chi tiêu xong, lập <b>phiếu hoàn ứng</b> kèm hoá đơn, bảng kê — số phiếu tạm ứng và số tiền đã ứng được điền sẵn.' +
@@ -544,6 +566,15 @@
     if (!isNew) Fl.loadThread(Fl.myId(), d);
   }
 
+  // tạm ứng: đã chi bao nhiêu từ các khoản chi gắn với tạm ứng này
+  function tuSpendBox(d) {
+    const l = App.data.expenses.filter((e) => e.tuDocId === d.id), spent = l.reduce((a, e) => a + U.toNumber(e.amount), 0), adv = Docs.total(d), left = adv - spent;
+    const ev = d.eventId ? '#/chi-tieu/' + d.eventId : '#/chi-tieu';
+    return '<div class="card"><div class="card-h"><div class="t">' + I('receipt') + 'Khoản chi từ tạm ứng này <span class="cnt0">' + l.length + '</span></div><a class="btn out sm" href="' + ev + '">' + I('plus') + 'Ghi khoản chi</a></div><div class="card-b">' +
+      '<div class="eq"><div class="eq-it"><small>Đã tạm ứng</small><b>' + money(adv) + '</b></div><div class="eq-it"><small>Đã chi (theo khoản chi)</small><b>' + money(spent) + '</b></div>' +
+      '<div class="eq-it ' + (left >= 0 ? 'ok' : 'warn') + '"><small>' + (left >= 0 ? 'Còn lại' : 'Chi vượt') + '</small><b>' + money(Math.abs(left)) + '</b></div></div>' +
+      (l.length ? '<div class="muted mt8" style="font-size:12.5px">' + l.slice(0, 6).map((e) => esc(e.content) + ' ' + U.groupThousand(e.amount)).join(' · ') + (l.length > 6 ? ' …' : '') + '</div>' : '<p class="muted mt8" style="font-size:12.5px;margin-bottom:0">Khi ghi khoản chi, chọn “Chi từ tạm ứng: ' + esc(d.soPhieu) + '” — phiếu hoàn ứng sẽ tự lấy đúng các khoản này.</p>') + '</div></div>';
+  }
   let pvTimer = null;
   function onFormInput(e) {
     const t = e.target;
@@ -820,7 +851,7 @@
       const d = App.data.docs.find((x) => x.id === draft.id); if (!d) return;
       const st = Docs.settle(d), diff = st.adv - st.total;
       let img = null;
-      const ov = App.openSheet(App.sheetHead('Báo đã nộp lại tiền tạm ứng thừa', d.soPhieu + ' · ' + money(diff)) +
+      const ov = App.openSheet(App.sheetHead('Báo đã nộp lại tiền tạm ứng thừa', 'Tạm ứng ' + (d.tuSoPhieu || '?') + ' · quyết toán ' + d.soPhieu + ' · ' + money(diff)) +
         '<div class="alert info">' + I('building') + '<div>Chuyển khoản về: <b>' + esc(App.settings.bankLine || '') + '</b></div></div>' +
         '<div class="fgrid c2 mt12">' + ui.money('rf-amt', 'Số tiền đã nộp', diff) + ui.date('rf-date', 'Ngày chuyển', U.todayISO()) +
         '<div class="sall">' + ui.text('rf-ref', 'Mã giao dịch (trên sao kê / biên lai)', '', { ph: 'VD: FT26306430305389' }) + '</div>' +

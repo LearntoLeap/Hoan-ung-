@@ -7,6 +7,18 @@
   const App = window.App, esc = U.esc, ui = App.ui, I = App.icon;
   const money = (n) => U.groupThousand(n) + ' đ';
 
+  // phiếu tạm ứng có thể chi từ đó; tạm ứng đang mở (chưa hoàn ứng) của một đợt chi
+  App.tuOptions = () => App.data.docs.filter((d) => d.type === 'TU' && App.Flow.status(d) !== 'tu-choi')
+    .map((d) => ({ v: d.id, t: d.soPhieu + ' · ' + U.groupThousand(App.Docs.total(d)) + ' đ · ' + (d.noiDung || '').slice(0, 40) }));
+  App.openTuOf = function (evId) {
+    const settled = new Set(App.data.docs.filter((d) => d.type === 'HU' && d.tuDocId).map((d) => d.tuDocId));
+    const l = App.data.docs.filter((d) => d.type === 'TU' && !settled.has(d.id) && App.Flow.status(d) !== 'tu-choi');
+    return l.find((d) => d.eventId === evId) || null;
+  };
+  // khoản chi đã nằm trong phiếu nào (hoàn ứng / thanh toán)
+  App.docOfExpense = function (expId) {
+    return App.data.docs.find((d) => d.type !== 'TU' && (d.items || []).some((it) => it.expenseId === expId)) || null;
+  };
   App.CATEGORIES = ['Di chuyển', 'Vận chuyển', 'Ăn uống', 'Vật tư / Thiết bị', 'Thuê địa điểm', 'In ấn', 'Lưu trú', 'Khác'];
   App.VAT_TYPES = [{ v: 'none', t: 'Không có hoá đơn' }, { v: 'bill', t: 'Hoá đơn bán lẻ (bill)' }, { v: 'vat', t: 'Hoá đơn VAT' }];
   App.vatBadge = function (e) {
@@ -84,6 +96,28 @@
     };
   };
 
+  // tóm tắt khoản chi theo từng tạm ứng của đợt chi + khoản ngoài tạm ứng
+  function tuSummary(evId, exps) {
+    const D = App.Docs;
+    const tuIds = new Set(exps.map((e) => e.tuDocId).filter(Boolean));
+    App.data.docs.filter((d) => d.type === 'TU' && d.eventId === evId && App.Flow.status(d) !== 'tu-choi').forEach((d) => tuIds.add(d.id));
+    const rows = [];
+    tuIds.forEach((id) => {
+      const tu = App.data.docs.find((d) => d.id === id); if (!tu) return;
+      const l = App.data.expenses.filter((e) => e.tuDocId === id), spent = l.reduce((a, e) => a + U.toNumber(e.amount), 0), adv = D.total(tu), diff = adv - spent;
+      const hu = App.data.docs.find((d) => d.type === 'HU' && d.tuDocId === id);
+      rows.push('<div class="tus-row"><div><b>' + esc(tu.soPhieu) + '</b> ' + App.Flow.badge(tu, null, true) + '<span class="sub">' + esc((tu.noiDung || '').slice(0, 60)) + '</span></div>' +
+        '<div class="tus-n"><span>Ứng <b>' + U.groupThousand(adv) + '</b></span><span>Đã chi <b>' + U.groupThousand(spent) + '</b> (' + l.length + ' khoản)</span><span class="' + (diff >= 0 ? 'ok-t' : 'danger-t') + '">' + (diff >= 0 ? 'Còn ' : 'Vượt ') + '<b>' + U.groupThousand(Math.abs(diff)) + '</b></span></div>' +
+        (hu ? '<a class="btn out xs" href="#/phieu/' + hu.id + '">' + I('wallet', 14) + esc(hu.soPhieu) + '</a>' : '<a class="btn xs" href="#/phieu/moi/HU?from=' + tu.id + '">' + I('wallet', 14) + 'Lập hoàn ứng</a>') + '</div>');
+    });
+    const out = exps.filter((e) => !e.tuDocId), free = out.filter((e) => !App.docOfExpense(e.id));
+    if (out.length) rows.push('<div class="tus-row"><div><b>Ngoài tạm ứng</b><span class="sub">Chi trước bằng tiền cá nhân → đề nghị thanh toán (DNTT)</span></div>' +
+      '<div class="tus-n"><span>' + out.length + ' khoản · <b>' + U.groupThousand(out.reduce((a, e) => a + U.toNumber(e.amount), 0)) + '</b></span>' + (free.length < out.length ? '<span>' + (out.length - free.length) + ' khoản đã vào DNTT</span>' : '') + '</div>' +
+      (free.length ? '<a class="btn xs" href="#/phieu/moi/TT?event=' + evId + '&exp=' + free.map((e) => e.id).join(',') + '">' + I('calc', 14) + 'Lập DNTT (' + free.length + ')</a>' : '<span class="badge ok">Đã lập DNTT</span>') + '</div>');
+    if (!rows.length) return '';
+    return '<div class="card mt16"><div class="card-h"><div class="t">' + I('wallet') + 'Theo tạm ứng</div><span class="muted" style="font-size:12.5px">Phiếu hoàn ứng / DNTT tự lấy đúng các khoản chi tương ứng</span></div><div class="card-b tus">' + rows.join('') + '</div></div>';
+  }
+
   /* ----------------- Màn hình ----------------- */
   App.screens['chi-tieu'] = function (root, route) {
     if (!App.data.events.length) {
@@ -116,6 +150,8 @@
         '<div class="thumb"' + (th ? ' data-act="expPhotos:' + e.id + '" title="Xem ảnh" style="cursor:zoom-in"' : '') + '>' + (th ? '<img src="' + App.imgURL(th) + '" alt="">' + (imgs.length > 1 ? '<span class="n">+' + (imgs.length - 1) + '</span>' : '') : I('receipt')) + '</div>' +
         '<div class="body"><div class="top"><div class="title">' + esc(e.content || '(chưa có nội dung)') + '</div><div class="amt">' + money(e.amount) + '</div></div>' +
         '<div class="meta"><span>' + esc(U.fmtDate(e.date)) + '</span>' + App.vatBadge(e) +
+        (e.tuDocId && App.data.docs.find((x) => x.id === e.tuDocId) ? '<span class="badge primary">' + I('file', 12) + 'TU ' + esc(App.data.docs.find((x) => x.id === e.tuDocId).soPhieu) + '</span>' : '<span class="badge out">Ngoài tạm ứng</span>') +
+        (App.docOfExpense(e.id) ? '<span class="badge ok">' + I('check', 12) + 'Đã vào ' + esc(App.docOfExpense(e.id).soPhieu) + '</span>' : '') +
         (imgs.length ? '<span class="badge out">' + I('image', 12) + imgs.length + ' ảnh</span>' : '<span class="badge warn">Thiếu ảnh</span>') +
         '<span>· ' + esc(e.category || 'Khác') + '</span>' + (e.participants ? '<span>· ' + esc(e.participants) + '</span>' : '') + '</div>' +
         (e.ghiChu || e.transferNote ? '<div class="note">' + esc([e.ghiChu, e.transferNote].filter(Boolean).join(' · ')) + '</div>' : '') + '</div></div>';
@@ -132,7 +168,7 @@
     };
 
     root.innerHTML = App.pageHead('Chi tiêu & minh chứng', esc(ev.name) + (ev.date ? ' · ' + esc(U.fmtDate(ev.date)) : '') + (ev.location ? ' · ' + esc(ev.location) : ''),
-      '<a class="btn out" href="#/phieu/moi/HU?event=' + evId + '">' + I('wallet') + 'Lập phiếu hoàn ứng</a>' +
+      (App.openTuOf(evId) ? '<a class="btn out" href="#/phieu/moi/HU?from=' + App.openTuOf(evId).id + '">' + I('wallet') + 'Hoàn ứng ' + esc(App.openTuOf(evId).soPhieu) + '</a>' : '<a class="btn out" href="#/phieu/moi/HU?event=' + evId + '">' + I('wallet') + 'Lập phiếu hoàn ứng</a>') +
       '<a class="btn out" href="#/phieu/moi/TT?event=' + evId + '">' + I('calc') + 'Lập phiếu thanh toán</a>' +
       '<button class="btn out" data-act="bulkExpense">' + I('list') + 'Nhập nhiều khoản</button>' +
       '<button class="btn" data-act="addExpense">' + I('plus') + 'Thêm khoản chi</button>') +
@@ -147,6 +183,7 @@
       App.kpi('check', 'Có hoá đơn VAT', m.pctVat + '<small>% giá trị</small>', m.vatCount + ' khoản · ' + money(m.vatAmt)) +
       App.kpi('image', 'Thiếu ảnh minh chứng', m.noProof + ' <small>khoản</small>', m.noProof ? 'Bổ sung trước khi quyết toán' : 'Đủ minh chứng') +
       '</div>' +
+      tuSummary(evId, exps) +
       '<div class="card mt16"><div class="card-h"><div class="t">' + I('list') + 'Danh sách khoản chi</div>' +
       '<button class="btn sec sm" data-act="quickCapture">' + I('camera') + 'Chụp bill</button></div>' +
       '<div class="card-b" style="padding-bottom:8px">' +
@@ -199,7 +236,7 @@
       d = Object.assign({}, expense, { images: App.data.images.filter((i) => i.expenseId === expense.id).map((i) => Object.assign({}, i, { isNewBlob: false })), removed: [], isNew: false });
     } else {
       const s = App.settings;
-      d = { id: U.uid(), eventId: evId, date: U.todayISO(), content: '', transferNote: '', ghiChu: '', participants: s.tenNgan || App.lastName(s.hoTen), category: 'Khác', vatType: 'none', amount: 0, createdAt: U.nowISO(), images: [], removed: [], isNew: true };
+      d = { id: U.uid(), eventId: evId, tuDocId: (App.openTuOf(evId) || {}).id || '', date: U.todayISO(), content: '', transferNote: '', ghiChu: '', participants: s.tenNgan || App.lastName(s.hoTen), category: 'Khác', vatType: 'none', amount: 0, createdAt: U.nowISO(), images: [], removed: [], isNew: true };
     }
     if (initialBlobs && initialBlobs.length) setTimeout(() => addImages(initialBlobs), 0);
     App.draftExpense = d;
@@ -210,6 +247,7 @@
       ui.text('exp-who', 'Người tham gia', d.participants, { ph: 'VD: Giáp, Dũng' }) +
       ui.select('exp-cat', 'Phân loại', d.category, App.CATEGORIES) +
       ui.select('exp-vat', 'Loại hoá đơn', App.vatTypeOf(d), App.VAT_TYPES, { hint: 'Chỉ Hoá đơn VAT được tính là "có hoá đơn".' }) +
+      '<div class="sall">' + ui.select('exp-tu', 'Chi từ tạm ứng', d.tuDocId || '', [{ v: '', t: 'Không — chi ngoài tạm ứng (lập DNTT)' }].concat(App.tuOptions()), { hint: 'Khoản chi từ tiền tạm ứng → tự vào phiếu hoàn ứng của tạm ứng đó. Ngoài tạm ứng → vào DNTT.' }) + '</div>' +
       ui.text('exp-note', 'Ghi chú (in vào cột Ghi chú của phiếu)', d.ghiChu || '', { ph: 'VD: Hoá đơn số 0012 ngày 04/11' }) +
       '<div class="sall">' + ui.textarea('exp-transfer', 'Nội dung chuyển khoản (tuỳ chọn)', d.transferNote, { rows: 2 }) + '</div>' +
       '</div>' +
@@ -249,7 +287,7 @@
     const exp = {
       id: d.id, eventId: d.eventId, date: App.val('exp-date') || U.todayISO(), content, amount,
       participants: App.val('exp-who'), category: App.val('exp-cat') || 'Khác', vatType: App.val('exp-vat') || 'none',
-      ghiChu: App.val('exp-note'), transferNote: App.val('exp-transfer'),
+      ghiChu: App.val('exp-note'), transferNote: App.val('exp-transfer'), tuDocId: App.val('exp-tu') || null,
       createdAt: d.createdAt || U.nowISO(), uploadedAt: d.uploadedAt || U.nowISO(),
     };
     await DB.put('expenses', exp);
@@ -297,6 +335,7 @@
     let rows = [null, null, null, null, null];
     const ov = App.openSheet(App.sheetHead('Nhập nhiều khoản chi', 'Điền từng dòng, dán từ Excel / Zalo, hoặc chọn file mẫu Excel') +
       '<div class="fgrid c2">' + App.ui.eventPicker('bk-ev', 'Sự kiện / đợt chi', evId) +
+      App.ui.select('bk-tu', 'Chi từ tạm ứng (cho cả bảng)', (App.openTuOf(evId) || {}).id || '', [{ v: '', t: 'Không — chi ngoài tạm ứng (lập DNTT)' }].concat(App.tuOptions())) +
       '<div class="field"><label>Nhập nhanh</label><div class="row" style="gap:8px"><button class="btn out sm" id="bk-paste">' + I('copy') + 'Dán từ Excel</button><button class="btn out sm" id="bk-file">' + I('excel') + 'Chọn file Excel</button><button class="btn ghost sm" id="bk-tpl">' + I('download') + 'Tải file mẫu</button></div></div></div>' +
       '<div id="bk-pastebox" hidden class="mt8"><textarea class="textarea" id="bk-text" rows="4" placeholder="Copy các dòng trong Excel (cột: ' + esc(BULK_COLS.join(' · ')) + ') rồi dán vào đây"></textarea><div class="row mt8" style="gap:8px"><button class="btn sm" id="bk-parse">' + I('check') + 'Đưa vào bảng</button><span class="muted" style="font-size:12.5px">Ngày dạng 05/11/2026 hoặc 05/11 · Số tiền 350.000 · Hoá đơn: VAT / bill / không</span></div></div>' +
       '<div class="tbl-wrap mt12"><table class="tbl items cards"><thead><tr><th>#</th><th>Ngày chi</th><th>Nội dung</th><th>Số tiền</th><th>Hoá đơn</th><th>Phân loại</th><th>Người tham gia</th><th>Ghi chú</th><th></th></tr></thead><tbody id="bk-body"></tbody></table></div>' +
@@ -350,7 +389,7 @@
       if (bad >= 0) { App.toast('Dòng ' + (bad + 1) + ' thiếu nội dung hoặc số tiền', 'err'); return; }
       const evName = App.val('bk-ev');
       const eid = (await App.resolveEvent(evName || (ev && ev.name) || ('Đợt chi ' + U.fmtDate(U.todayISO())))) || evId;
-      for (const r of list) await DB.put('expenses', { id: U.uid(), eventId: eid, date: r.date || U.todayISO(), content: r.content, amount: r.amount, vatType: r.vat, category: r.cat, participants: r.who, ghiChu: r.note, transferNote: '', createdAt: U.nowISO() });
+      for (const r of list) await DB.put('expenses', { id: U.uid(), eventId: eid, date: r.date || U.todayISO(), content: r.content, amount: r.amount, vatType: r.vat, category: r.cat, participants: r.who, ghiChu: r.note, transferNote: '', tuDocId: App.val('bk-tu') || null, createdAt: U.nowISO() });
       App.closeAllSheets(); App.toast('Đã lưu ' + list.length + ' khoản chi · ' + money(list.reduce((a, r) => a + r.amount, 0)), 'ok');
       App.nav('chi-tieu/' + eid);
     };
@@ -396,8 +435,12 @@
     },
     selExpDoc(type) {
       const ids = App.Sel.list(); if (!ids.length) return;
-      const ev = (App.data.expenses.find((x) => x.id === ids[0]) || {}).eventId || '';
-      location.hash = '#/phieu/moi/' + type + '?event=' + ev + '&exp=' + ids.join(',');
+      const sel = App.data.expenses.filter((x) => ids.includes(x.id));
+      const ev = (sel[0] || {}).eventId || '';
+      const tus = Array.from(new Set(sel.map((x) => x.tuDocId).filter(Boolean)));
+      if (type === 'HU' && tus.length > 1) { App.toast('Các khoản đã chọn thuộc ' + tus.length + ' tạm ứng khác nhau — chọn khoản của một tạm ứng', 'err'); return; }
+      const tu = type === 'HU' ? (tus[0] || (App.openTuOf(ev) || {}).id || '') : '';
+      location.hash = '#/phieu/moi/' + type + '?event=' + ev + (tu ? '&from=' + tu : '') + '&exp=' + ids.join(',');
     },
     expPhotos(id, node) {
       const imgs = App.data.images.filter((x) => x.expenseId === id);

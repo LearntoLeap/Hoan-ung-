@@ -336,6 +336,11 @@
       items: [{ noiDung: 'Pin sạc AA (40 viên)', soLuong: 40, donGia: 22500 }, { noiDung: 'Dây nối, linh kiện thay thế', donGia: 600000 }] });
     await sentN(A, tu3, ts(0, 8, 11));
 
+    // khoản chi gắn với tạm ứng đã chi từ đó; DNTT bù ghi rõ bù cho tạm ứng nào
+    for (const [e, t] of [[e31, tu1], [e32, tu1], [e11, tu2], [e12, tu2], [e13, tu2]]) { e.tuDocId = t.id; await put(A, 'expense', e); }
+    Object.assign(tt1, { tuDocId: tu2.id, tuSoPhieu: tu2.soPhieu, deNghiKhac: 'Bù phần chi vượt của phiếu tạm ứng ' + tu2.soPhieu + ' – quyết toán tại phiếu hoàn ứng ' + hu2.soPhieu + ': đã ứng 2.000.000 đ, thực chi 2.450.000 đ, chi vượt 450.000 đ.' });
+    await put(A, 'doc', tt1);
+
     /* ---------------- Trần Thị Bình ---------------- */
     const B = 'demo-nv2';
     const evB = await mkEvent(B, 'Demo sản phẩm tại Hải Phòng', iso(-1, 6), 'Hải Phòng');

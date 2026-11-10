@@ -216,7 +216,7 @@
     const tbl = (l) => l.length ? '<div class="tbl-wrap"><table class="tbl cards"><thead><tr><th>#</th><th>Người</th><th>Số phiếu</th><th>Ngày lập</th><th>Nội dung</th><th class="num">Số tiền</th><th>Liên quan</th><th>Đã chi</th><th>Trạng thái</th></tr></thead><tbody>' +
       l.map((x, i) => '<tr><td class="ix">' + (i + 1) + '</td><td data-l="Người"><b>' + esc(x.t._ownerName) + '</b></td><td data-l="Số phiếu">' + docLink(x.t) + '</td><td data-l="Ngày lập" class="nowrap">' + esc(U.fmtDate(x.t.ngayLap)) + '</td>' +
         '<td data-l="Nội dung" style="min-width:200px">' + esc(x.t.noiDung || '') + '</td><td class="num b" data-l="Số tiền">' + money(x.total) + '</td>' +
-        '<td data-l="Liên quan">' + (x.hu ? 'Bù cho ' + docLink(x.hu) : '<span class="muted">Ngoài tạm ứng</span>') + '</td>' +
+        '<td data-l="Liên quan">' + (x.hu ? 'Bù vượt tạm ứng ' + (x.tu ? docLink(x.tu) : '<b>' + esc(x.tuSo || '?') + '</b>') + '<span class="sub">quyết toán ' + esc(x.hu.soPhieu) + '</span>' : '<span class="muted">Ngoài tạm ứng</span>') + '</td>' +
         '<td data-l="Đã chi" class="nowrap">' + (x.paid ? esc(U.fmtDate(x.paid.at)) + (x.paid.ref ? '<span class="sub mono">' + esc(x.paid.ref) + '</span>' : '') : '—') + '</td><td data-l="Trạng thái">' + F().badge(x.t, x.o, true) + '</td></tr>').join('') +
       '</tbody><tfoot><tr><td colspan="5">Cộng</td><td class="num">' + money(l.reduce((a, x) => a + x.total, 0)) + '</td><td colspan="3"></td></tr></tfoot></table></div>' : '<p class="muted" style="padding:14px 18px;margin:0;font-size:13px">Không có.</p>';
     return '<div class="card"><div class="card-h"><div class="t">' + I('link') + 'DNTT bù chi vượt tạm ứng <span class="cnt0">' + R.k.ttBu.length + '</span></div></div><div class="card-b flush">' + tbl(R.k.ttBu) + '</div></div>' +
@@ -324,7 +324,7 @@
         ['STT', 'Người', 'Số phiếu', 'Ngày lập', 'Nội dung', 'Số tiền', 'Phân loại', 'Đã chi (mã GD)', 'Trạng thái']);
       let row = hr + 1;
       [].concat(R.k.ttBu, R.k.ttDl).forEach((x, i) => {
-        X.tableRow(ws, row, [i + 1, x.t._ownerName, x.t.soPhieu, App.Export._isoToDate(x.t.ngayLap), x.t.noiDung || '', x.total, x.kind === 'bu' ? 'Bù hoàn ứng ' + (x.hu ? x.hu.soPhieu : '') : 'Độc lập (ngoài tạm ứng)',
+        X.tableRow(ws, row, [i + 1, x.t._ownerName, x.t.soPhieu, App.Export._isoToDate(x.t.ngayLap), x.t.noiDung || '', x.total, x.kind === 'bu' ? 'Bù vượt tạm ứng ' + (x.tuSo || '?') + (x.hu ? ' (quyết toán ' + x.hu.soPhieu + ')' : '') : 'Độc lập (ngoài tạm ứng)',
           x.paid ? U.fmtDate(x.paid.at) + (x.paid.ref ? ' · ' + x.paid.ref : '') : '', F().ST[x.s].s], ['c', '', '', 'd', '', 'n', '', '', ''], i % 2);
         stCell(ws, row, 9, F().ST[x.s].cls, F().ST[x.s].s); row++;
       });
@@ -420,7 +420,7 @@
         td(esc(x.desc) + '<br><small>' + esc(x.so) + '</small>') + td(esc(x.ref || '—'), 'mono') + td(esc(x.cat)) + td(st(/tất toán|Khớp|Đã thanh toán|Đã nộp|Đã chi/.test(x.follow) ? 'ok' : /Phải|chưa|Chi vượt/i.test(x.follow) ? 'warn' : 'primary', x.follow)) + '</tr>')) + '</div>';
     const ttB = '<div class="pdf-blk"><h2>IV. Thanh toán (DNTT)</h2>' + t(['STT', 'Người', 'Số phiếu', 'Nội dung', 'Số tiền', 'Phân loại', 'Trạng thái'],
       [].concat(k.ttBu, k.ttDl).map((x, i) => '<tr>' + td(i + 1, 'c') + td(esc(x.t._ownerName)) + td(esc(x.t.soPhieu)) + td(esc(x.t.noiDung || '')) + td(U.groupThousand(x.total), 'n') +
-        td(x.kind === 'bu' ? 'Bù ' + esc(x.hu ? x.hu.soPhieu : 'hoàn ứng') : 'Độc lập') + td(st(F().ST[x.s].cls, F().ST[x.s].s)) + '</tr>')) + '</div>';
+        td(x.kind === 'bu' ? 'Bù vượt ' + esc(x.tuSo || '?') + '<br><small>' + esc(x.hu ? x.hu.soPhieu : '') + '</small>' : 'Độc lập') + td(st(F().ST[x.s].cls, F().ST[x.s].s)) + '</tr>')) + '</div>';
     const hdB = '<div class="pdf-blk"><h2>V. Dòng chi chưa có hoá đơn (' + k.hdMiss.length + ')</h2>' + (k.hdMiss.length ? t(['STT', 'Người', 'Phiếu', 'Khoản chi', 'Số tiền', 'Hoá đơn'],
       k.hdMiss.map((x, i) => '<tr>' + td(i + 1, 'c') + td(esc(x.d._ownerName)) + td(esc(x.d.soPhieu) + ' · dòng ' + (x.i + 1)) + td(esc(x.it.noiDung || '')) + td(U.groupThousand(x.amount), 'n') + td(st(F().HD_CLS[x.hd], F().HD_T[x.hd])) + '</tr>')) : '<p>Mọi dòng chi đều có hoá đơn.</p>') + '</div>';
     const sign = '<div class="pdf-blk rp-sign"><p class="rp-date">' + esc(D().dateLine(U.todayISO())) + '</p><div><span><b>NGƯỜI LẬP</b><i>(Ký, ghi rõ họ tên)</i><br><br><br>' + esc(m.owner.name.replace(/ \(.+\)$/, '')) + '</span><span><b>KẾ TOÁN TRƯỞNG</b><i>(Ký, họ tên)</i><br><br><br>' + esc(s.keToanTruong || '') + '</span><span><b>' + esc(s.chucDanhPheDuyet || 'GIÁM ĐỐC') + '</b><i>(Ký, họ tên)</i><br><br><br>' + esc(s.giamDoc || '') + '</span></div></div>';
@@ -468,7 +468,7 @@
       R.ledger.map((x) => [String(x.stt), U.fmtDate(x.date), x.amount, String(x.name).toUpperCase(), x.desc + ' (' + x.so + ')', x.ref || '—', x.cat, { t: x.follow, cls: /tất toán|Khớp|Đã thanh toán|Đã nộp|Đã chi/.test(x.follow) ? 'ok' : /Phải|chưa|Chi vượt/i.test(x.follow) ? 'warn' : 'primary' }])));
     ch.push(Hh('IV. THANH TOÁN (DNTT)'));
     ch.push(table([0.5, 2, 1.8, 3.6, 1.4, 2.2, 1.5], ['STT', 'Người', 'Số phiếu', 'Nội dung', 'Số tiền', 'Phân loại', 'Trạng thái'],
-      [].concat(k.ttBu, k.ttDl).map((x, i) => [String(i + 1), x.t._ownerName, x.t.soPhieu, x.t.noiDung || '', x.total, x.kind === 'bu' ? 'Bù ' + (x.hu ? x.hu.soPhieu : 'hoàn ứng') : 'Độc lập', { t: F().ST[x.s].s, cls: F().ST[x.s].cls }])));
+      [].concat(k.ttBu, k.ttDl).map((x, i) => [String(i + 1), x.t._ownerName, x.t.soPhieu, x.t.noiDung || '', x.total, x.kind === 'bu' ? 'Bù vượt ' + (x.tuSo || '?') + (x.hu ? ' / ' + x.hu.soPhieu : '') : 'Độc lập', { t: F().ST[x.s].s, cls: F().ST[x.s].cls }])));
     ch.push(Hh('V. DÒNG CHI CHƯA CÓ HOÁ ĐƠN (' + k.hdMiss.length + ')'));
     ch.push(k.hdMiss.length ? table([0.5, 2, 2.4, 4, 1.4, 2], ['STT', 'Người', 'Phiếu', 'Khoản chi', 'Số tiền', 'Hoá đơn'],
       k.hdMiss.map((x, i) => [String(i + 1), x.d._ownerName, x.d.soPhieu + ' · dòng ' + (x.i + 1), x.it.noiDung || '', x.amount, { t: F().HD_T[x.hd], cls: F().HD_CLS[x.hd] }])) : P(R_('Mọi dòng chi đều có hoá đơn.', { i: true })));

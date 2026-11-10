@@ -1072,3 +1072,11 @@ tr.row-off td{opacity:.55}
 .pf-file{aspect-ratio:3/4;border-radius:12px;border:1.5px dashed hsl(var(--vien));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:hsl(var(--chinh-dam));text-decoration:none !important;font-size:12px;padding:8px;text-align:center;word-break:break-word}
 .pf-it small{font-size:11.5px;color:hsl(var(--chu-dam));line-height:1.35}.pf-it small i{color:hsl(var(--chu-nhat));font-style:normal}
 #proof-box:empty{display:none}
+
+/* tóm tắt theo tạm ứng (trang Chi tiêu) */
+.tus{display:grid;gap:8px}
+.tus-row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.6fr) auto;gap:12px;align-items:center;padding:10px 12px;border-radius:12px;background:hsl(var(--phu))}
+.tus-row .sub{display:block}
+.tus-n{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:hsl(var(--chu-nhat))}
+.tus-n b{color:hsl(var(--chu-dam))}
+@media(max-width:720px){.tus-row{grid-template-columns:1fr}}

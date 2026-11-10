@@ -293,9 +293,9 @@
   };
   Flow.reportRefund = async function (doc, o) {
     const me = Flow.myId();
-    await Flow.addMsg(me, doc, { kind: 'refund', text: 'Đã nộp lại ' + money(o.amount) + ' về tài khoản công ty' + (o.ref ? ' · Mã GD ' + o.ref : '') + (o.note ? ' · ' + o.note : ''),
+    await Flow.addMsg(me, doc, { kind: 'refund', text: 'Đã nộp lại ' + money(o.amount) + ' tiền thừa của tạm ứng ' + (doc.tuSoPhieu || '?') + ' (quyết toán ' + doc.soPhieu + ') về tài khoản công ty' + (o.ref ? ' · Mã GD ' + o.ref : '') + (o.note ? ' · ' + o.note : ''),
       amount: o.amount, ref: o.ref || '', date: o.date || U.todayISO(), img: o.img || null });
-    await Flow.notify('acc', { title: Flow.myName() + ' báo đã nộp lại ' + money(o.amount), body: Flow.docLabel(doc) + (o.ref ? ' · Mã GD ' + o.ref : ''), link: docLink(me, doc, true), owner: me, docId: doc.id, kind: 'refund' });
+    await Flow.notify('acc', { title: Flow.myName() + ' báo đã nộp lại ' + money(o.amount) + ' (tạm ứng ' + (doc.tuSoPhieu || '?') + ')', body: 'Quyết toán ' + Flow.docLabel(doc) + (o.ref ? ' · Mã GD ' + o.ref : ''), link: docLink(me, doc, true), owner: me, docId: doc.id, kind: 'refund' });
     Flow.refunds.push({ owner: me, doc_id: doc.id, at: U.nowISO(), data: { kind: 'refund', amount: o.amount, ref: o.ref } });
     App.toast('Đã báo kế toán — chờ xác nhận', 'ok');
   };
@@ -344,8 +344,8 @@
     r.refund = { ok: true, at: o.date || U.todayISO(), ref: o.ref || '', amount: o.amount, by: Flow.myId(), byName: Flow.myName() };
     await Flow.B().putReview(owner, hu.id, r);
     Flow.rev[Flow.key(owner, hu.id)] = r;
-    await Flow.log(owner, hu, 'Xác nhận đã nhận tiền nộp lại', [money(o.amount) + ' · ngày ' + U.fmtDate(r.refund.at) + (o.ref ? ' · Mã GD ' + o.ref : '')]);
-    await Flow.notify(owner, { title: 'Kế toán đã xác nhận nhận ' + money(o.amount) + ' nộp lại', body: Flow.docLabel(hu) + ' đã tất toán', link: docLink(owner, hu, false), owner, docId: hu.id });
+    await Flow.log(owner, hu, 'Xác nhận đã nhận tiền nộp lại của tạm ứng ' + (hu.tuSoPhieu || ''), [money(o.amount) + ' · ngày ' + U.fmtDate(r.refund.at) + (o.ref ? ' · Mã GD ' + o.ref : '')]);
+    await Flow.notify(owner, { title: 'Kế toán đã xác nhận nhận ' + money(o.amount) + ' nộp lại của tạm ứng ' + (hu.tuSoPhieu || ''), body: 'Tạm ứng ' + (hu.tuSoPhieu || '') + ' (' + Flow.docLabel(hu) + ') đã tất toán', link: docLink(owner, hu, false), owner, docId: hu.id });
     Flow.invalidate();
   };
 
@@ -386,7 +386,7 @@
     r.topup = { ok: true, at: o.date || U.todayISO(), ref: o.ref || '', amount: o.amount, by: Flow.myId(), byName: Flow.myName() };
     await Flow.B().putReview(owner, hu.id, r);
     Flow.rev[Flow.key(owner, hu.id)] = r;
-    await Flow.log(owner, hu, 'Xác nhận công ty đã chi bù', [money(o.amount) + ' · ngày ' + U.fmtDate(r.topup.at) + (o.ref ? ' · Mã GD ' + o.ref : '')]);
+    await Flow.log(owner, hu, 'Xác nhận công ty đã chi bù cho tạm ứng ' + (hu.tuSoPhieu || ''), [money(o.amount) + ' · ngày ' + U.fmtDate(r.topup.at) + (o.ref ? ' · Mã GD ' + o.ref : '')]);
     await Flow.notify(owner, { title: 'Công ty đã chuyển bù ' + money(o.amount) + ' cho bạn', body: Flow.docLabel(hu) + ' đã tất toán', link: docLink(owner, hu, false), owner, docId: hu.id, kind: 'decide' });
     Flow.invalidate();
   };
@@ -474,9 +474,10 @@
       if (!LOCKED.includes(hs)) { k = 'hu-pending'; label = 'Hoàn ứng ' + ST[hs].s.toLowerCase(); cls = ST[hs].cls; }
       else if (diff === 0) { k = 'ok'; label = 'Khớp – đã tất toán'; cls = 'ok'; }
       else if (diff > 0) {
-        if (rv.refund && rv.refund.ok) { k = 'refunded'; label = 'Đã nộp lại ' + money(diff); cls = 'ok'; }
-        else if (refBy[k2(o, hu.id)]) { k = 'refund-wait'; label = 'Chờ KT xác nhận nộp lại ' + money(diff); cls = 'accent'; }
-        else { k = 'refund-due'; label = 'Phải nộp lại ' + money(diff); cls = 'warn'; }
+        const tn = hu.tuSoPhieu ? ' (' + hu.tuSoPhieu + ')' : '';
+        if (rv.refund && rv.refund.ok) { k = 'refunded'; label = 'Đã nộp lại ' + money(diff) + tn; cls = 'ok'; }
+        else if (refBy[k2(o, hu.id)]) { k = 'refund-wait'; label = 'Chờ KT xác nhận nộp lại ' + money(diff) + tn; cls = 'accent'; }
+        else { k = 'refund-due'; label = 'Phải nộp lại ' + money(diff) + tn; cls = 'warn'; }
       } else if (rv.topup && rv.topup.ok) { k = 'topup-done'; label = 'Công ty đã chi bù ' + money(-diff); cls = 'ok'; }
       else if (!tt) { k = 'topup-due'; label = 'Chi vượt ' + money(-diff) + ' – công ty cần chi bù'; cls = 'warn'; }
       else { const ts = st(tt); k = ts === 'da-chi' ? 'topup-done' : 'topup-pending'; label = (ts === 'da-chi' ? 'Đã chi bù ' : 'DNTT bù ' + ST[ts].s.toLowerCase() + ' ') + money(-diff); cls = ts === 'da-chi' ? 'ok' : 'primary'; }
@@ -499,7 +500,9 @@
     const hus = docs.filter((d) => d.type === 'HU').map(huInfo);
     const tts = docs.filter((d) => d.type === 'TT').map((t) => {
       const o = own(t), hu = t.huDocId ? byId[k2(o, t.huDocId)] : null, r = Flow.reviewOf(t, o) || {};
-      return { t, o, s: st(t), kind: t.huDocId ? 'bu' : 'doc-lap', hu, total: tot(t), paid: r.paid || null, soSo: r.soSo || '' };
+      const tu = hu && hu.tuDocId ? byId[k2(o, hu.tuDocId)] : (t.tuDocId ? byId[k2(o, t.tuDocId)] : null);
+      const tuSo = (tu && tu.soPhieu) || (hu && hu.tuSoPhieu) || t.tuSoPhieu || '';
+      return { t, o, s: st(t), kind: t.huDocId ? 'bu' : 'doc-lap', hu, tu, tuSo, total: tot(t), paid: r.paid || null, soSo: r.soSo || '' };
     });
     // dòng chi phí & hoá đơn (hoàn ứng + thanh toán đã gửi)
     const lines = [];
@@ -526,13 +529,13 @@
         ledger.push(Object.assign({}, base, { date: d.ngayLap, amount: x.spent, dir: 'qt', desc: d.noiDung || '', ref: '', cat: 'Hoàn ứng – quyết toán tạm ứng',
           note: 'Quyết toán ' + (d.tuSoPhieu || '') + ': ứng ' + U.groupThousand(x.adv) + ' · thực chi ' + U.groupThousand(x.spent), follow: x.label }));
         if (x.topup && x.topup.ok) ledger.push(Object.assign({}, base, { date: x.topup.at, amount: -x.diff, dir: 'chi', desc: 'Công ty chi bù vượt tạm ứng ' + (d.tuSoPhieu || ''), ref: x.topup.ref || '', cat: 'Chi bù hoàn ứng',
-          note: 'Kế toán xác nhận đã chuyển trả nhân sự', follow: 'Đã tất toán' }));
+          note: 'Bù phần chi vượt của tạm ứng ' + (d.tuSoPhieu || '') + ' (ứng ' + U.groupThousand(x.adv) + ', chi ' + U.groupThousand(x.spent) + '); KT đã chuyển trả nhân sự', follow: 'Đã tất toán ' + (d.tuSoPhieu || '') }));
         if (x.refund && x.refund.ok) ledger.push(Object.assign({}, base, { date: x.refund.at, amount: x.diff, dir: 'thu', desc: 'Nộp lại tạm ứng thừa ' + (d.tuSoPhieu || ''), ref: x.refund.ref || '', cat: 'Thu hồi tạm ứng thừa',
-          note: 'Kế toán xác nhận đã nhận về TK công ty', follow: 'Đã tất toán' }));
+          note: 'Tiền thừa của tạm ứng ' + (d.tuSoPhieu || '') + ' (ứng ' + U.groupThousand(x.adv) + ', chi ' + U.groupThousand(x.spent) + '); KT đã nhận về TK công ty', follow: 'Đã tất toán ' + (d.tuSoPhieu || '') }));
       } else {
-        const bu = !!d.huDocId;
+        const bu = !!d.huDocId, huD = bu ? byId[k2(o, d.huDocId)] : null, tuSo = (huD && huD.tuSoPhieu) || d.tuSoPhieu || '';
         ledger.push(Object.assign({}, base, { date: paid.at || d.ngayLap, amount: tot(d), dir: 'chi', desc: d.noiDung || '', ref: paid.ref || '', cat: bu ? 'Thanh toán bù hoàn ứng' : 'Thanh toán chi phí',
-          note: 'Phiếu ' + d.soPhieu + ' ' + ST[s].t.toLowerCase() + (bu ? '; bù chi vượt tạm ứng' : '; ngoài tạm ứng'), follow: s === 'da-chi' ? 'Đã thanh toán' : 'Chờ ' + (s === 'da-duyet' ? 'chi' : 'duyệt') }));
+          note: 'Phiếu ' + d.soPhieu + ' ' + ST[s].t.toLowerCase() + (bu ? '; bù chi vượt tạm ứng ' + tuSo + (huD ? ' (quyết toán ' + huD.soPhieu + ')' : '') : '; ngoài tạm ứng'), follow: s === 'da-chi' ? 'Đã thanh toán' : 'Chờ ' + (s === 'da-duyet' ? 'chi' : 'duyệt') }));
       }
     });
     ledger.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));

@@ -71,7 +71,7 @@
       return '<tr class="click" data-href="#/duyet/' + esc(d._owner) + '/' + esc(d.id) + '">' + (st(d) === 'cho-duyet' ? App.chk(d._owner + '~' + d.id) : '<td class="chk"></td>') +
         '<td data-l="Người đề nghị"><b>' + esc(d._ownerName) + '</b><span class="sub">' + esc(d._dept || '') + '</span></td>' +
         '<td data-l="Số phiếu"><span class="badge mono primary">' + esc(d.soPhieu || '—') + '</span>' + (rv.soSo ? '<span class="sub mono">Sổ ' + esc(rv.soSo) + '</span>' : '') + '</td>' +
-        '<td data-l="Loại"><span class="tchip t-' + d.type + '">' + esc(T ? T.label : d.type) + '</span>' + (d.type === 'TT' ? '<span class="sub">' + (d.huDocId ? 'Bù hoàn ứng' : 'Độc lập') + '</span>' : '') + '</td>' +
+        '<td data-l="Loại"><span class="tchip t-' + d.type + '">' + esc(T ? T.label : d.type) + '</span>' + (d.type === 'TT' ? '<span class="sub">' + (d.huDocId ? 'Bù vượt ' + esc(((docs.find((x) => x._owner === d._owner && x.id === d.huDocId) || {}).tuSoPhieu) || 'tạm ứng') : 'Độc lập') + '</span>' : '') + '</td>' +
         '<td data-l="Nội dung" style="min-width:200px">' + esc(d.noiDung || '') + '<span class="sub">' + Dc.filledItems(d).length + ' dòng · lập ' + esc(d.ngayLap ? U.fmtDate(d.ngayLap) : '') + '</span></td>' +
         '<td class="num b" data-l="Số tiền">' + money(Dc.total(d)) + '</td>' +
         '<td data-l="Hoá đơn">' + hdSum(d) + '</td>' +
@@ -169,7 +169,9 @@
         (x.refund && x.refund.ok ? '<div class="mt8 ok-t">' + I('check', 14) + ' Đã nhận ' + money(x.refund.amount) + ' ngày ' + esc(U.fmtDate(x.refund.at)) + (x.refund.ref ? ' · Mã GD ' + esc(x.refund.ref) : '') + ' (' + esc(x.refund.byName || '') + ')</div>' : '') + '</div></div>';
     } else {
       const hu = doc.huDocId ? all.docs.find((d) => d._owner === owner && d.id === doc.huDocId) : null;
-      link = '<div class="alert info">' + I('calc') + '<div><b>Phân loại:</b> ' + (doc.huDocId ? 'DNTT <b>bù chi vượt tạm ứng</b> của phiếu hoàn ứng ' + (hu ? docA(hu) : '') : 'DNTT <b>độc lập</b> — khoản chi ngoài tạm ứng') + '</div></div>';
+      const tuB = hu && hu.tuDocId ? all.docs.find((d) => d._owner === owner && d.id === hu.tuDocId) : null;
+      const sh = hu ? D().settle(hu) : null;
+      link = '<div class="alert info">' + I('calc') + '<div><b>Phân loại:</b> ' + (doc.huDocId ? 'DNTT <b>bù chi vượt</b> cho tạm ứng ' + (tuB ? docA(tuB) : '<b>' + esc((hu && hu.tuSoPhieu) || '?') + '</b>') + '<br>Quyết toán tại phiếu hoàn ứng ' + (hu ? docA(hu) : '') + (sh ? ' · đã ứng ' + money(sh.adv) + ' · thực chi ' + money(sh.total) + ' · <b>chi vượt ' + money(Math.max(0, sh.total - sh.adv)) + '</b>' : '') : 'DNTT <b>độc lập</b> — khoản chi ngoài tạm ứng') + '</div></div>';
     }
 
     const thumbs = (it) => {

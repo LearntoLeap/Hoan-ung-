@@ -214,7 +214,7 @@
     return { owner: Cloud.user.id, id: item.id, kind: item.kind, updated_at: item.updated_at, data };
   }
   // làm sạch mã định danh trong dữ liệu kéo về (chặn chèn mã qua id)
-  const ID_FIELDS = ['eventId', 'expenseId', 'docId', 'tuDocId', 'legacyId'];
+  const ID_FIELDS = ['eventId', 'expenseId', 'docId', 'tuDocId', 'huDocId', 'itemId', 'legacyId'];
   function cleanIds(rec) {
     ID_FIELDS.forEach((k) => { if (rec[k] != null && !U.isId(String(rec[k]))) rec[k] = null; });
     if (Array.isArray(rec.items)) rec.items.forEach((it) => { if (it && it.id && !U.isId(String(it.id))) it.id = U.uid(); if (it && it.expenseId && !U.isId(String(it.expenseId))) it.expenseId = null; });
