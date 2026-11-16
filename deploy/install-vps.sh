@@ -10,6 +10,12 @@ set -euo pipefail
 DOMAIN="${1:-}"; MAIL="${2:-}"
 DIR=/var/www/ltl-hoan-ung
 if [ -z "$DOMAIN" ]; then echo "Thiếu tên miền. VD: sudo bash install-vps.sh hoanung.learntoleap.vn admin@learntoleap.vn"; exit 1; fi
+# Máy đã có aaPanel / BT Panel tự quản lý nginx → KHÔNG cài nginx thứ hai (sẽ tranh cổng 80 và làm hỏng các trang đang chạy)
+if [ -d /www/server/panel ] || [ -x /www/server/nginx/sbin/nginx ]; then
+  echo "Máy này dùng aaPanel. Không chạy script này — hãy thêm site trong aaPanel (Website → Add site, tên miền $DOMAIN,"
+  echo "thư mục /www/wwwroot/$DOMAIN), rồi: git clone https://github.com/LearntoLeap/Hoan-ung-.git /www/wwwroot/$DOMAIN và bật SSL trong aaPanel."
+  exit 1
+fi
 
 echo "==> Cài nginx, certbot, git"
 apt-get update -y
