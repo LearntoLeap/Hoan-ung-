@@ -386,6 +386,14 @@
   /* ----------------------------- Khởi động ----------------------------- */
   Cloud.init = async function () {
     let demo = ''; try { demo = localStorage.getItem('ltl_demo') || ''; } catch (e) {}
+    // BẢN CHÍNH THỨC: không còn chế độ dùng thử (chỉ giữ trên máy lập trình localhost để kiểm thử)
+    if (demo && !LOCAL_DEV) {
+      demo = '';
+      try { localStorage.removeItem('ltl_demo'); } catch (e) {}
+      let ow = ''; try { ow = localStorage.getItem(OWNER_KEY) || ''; } catch (e) {}
+      if (/^(demo-|local-demo)/.test(ow)) { await clearLocalData(); try { localStorage.removeItem(OWNER_KEY); } catch (e) {} }
+      try { indexedDB.deleteDatabase('ltl_demo_srv'); } catch (e) {}
+    }
     if (demo && App.Demo) {
       try { await App.Demo.resume(); setState('ok'); return; }
       catch (e) { console.error(e); try { localStorage.removeItem('ltl_demo'); } catch (er) {} Cloud.demo = false; Cloud.user = null; }
@@ -432,8 +440,7 @@
           '<button class="btn block lg" type="submit" id="au-go">Đăng nhập</button></form>' +
           '<div class="center mt16 muted" style="font-size:13.5px">Chưa có tài khoản? <a href="#" data-act="authTab:signup"><b class="grad-text">Tạo tài khoản</b></a></div>' +
           '<div class="center mt8"><button class="btn ghost sm" data-act="forgotPass" style="text-transform:none">Quên mật khẩu?</button></div>' +
-          '<div class="sn-hr" style="margin:18px 0"></div><button class="btn out block" data-act="tryDemo">' + I('sparkle') + 'Dùng thử không cần tài khoản</button>' +
-          '<p class="muted center" style="font-size:12px;margin:8px 0 0">4 tài khoản mẫu (nhân sự, kế toán, quản trị) có sẵn dữ liệu — thử trọn quy trình gửi ↔ duyệt ngay trên máy này.</p>'
+          (LOCAL_DEV ? '<div class="sn-hr" style="margin:18px 0"></div><button class="btn out block" data-act="tryDemo">' + I('sparkle') + 'Dùng thử (chỉ trên máy lập trình)</button>' : '')
         : '<h2 class="t">Tạo tài khoản</h2><p class="lead">Mỗi người tự tạo tài khoản bằng email công việc. Thông tin này được điền sẵn vào phiếu.</p>' +
           '<form id="auth-form" novalidate>' + ui.text('au-name', 'Họ và tên', '', { auto: 'name', ph: 'Nguyễn Văn A', req: true }) +
           ui.text('au-dept', 'Bộ phận', '', { list: 'au-dl', ph: 'Chọn hoặc gõ bộ phận' }) + ui.datalist('au-dl', App.DEFAULT_SETTINGS.boPhanList) +
