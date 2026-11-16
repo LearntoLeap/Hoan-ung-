@@ -1,7 +1,19 @@
-# Đưa app lên VPS
+# Đưa app lên VPS (bản chính thức)
 
 App là **web tĩnh** (HTML/CSS/JS), không cần Node, PHP hay database trên VPS.
-Đăng nhập và đồng bộ dùng Supabase, nên VPS chỉ cần phục vụ file.
+Tài khoản, dữ liệu, duyệt chứng từ, tin nhắn đều nằm trên **Supabase** — VPS chỉ phục vụ file.
+Bản chính thức **không còn chế độ Dùng thử**.
+
+## Cài nhanh bằng 1 lệnh
+
+Trỏ tên miền (bản ghi A) về IP VPS, rồi SSH vào VPS và chạy:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LearntoLeap/Hoan-ung-/main/deploy/install-vps.sh | sudo bash -s -- hoanung.learntoleap.vn admin@learntoleap.vn
+```
+
+Script tự cài nginx + HTTPS, lấy code, cấu hình. Chạy lại lệnh này để **cập nhật bản mới**.
+Sau đó làm tiếp mục 4 (Supabase) và mục 6 (tài khoản chính). Các mục 1–3 dưới đây là cách làm tay.
 
 ## 1. Chuẩn bị trên VPS (Ubuntu/Debian)
 
@@ -59,7 +71,7 @@ Quyền admin: chạy `supabase/setup.sql` trong **SQL Editor** (một lần, ch
 ## 5. Kiểm tra sau khi đưa lên
 
 - Mở `https://TEN-MIEN-CUA-BAN` → thấy trang đăng nhập.
-- Bấm **Dùng thử không cần tài khoản** → **Nạp dữ liệu mẫu** → xuất thử Word / Excel.
+- Tạo một phiếu thử bằng tài khoản nhân sự → gửi duyệt → đăng nhập admin duyệt → xuất Word / Excel / PDF.
 - Trên điện thoại: thử **Chụp bill** (cần HTTPS mới bật camera được).
 - Đăng nhập tài khoản thật → chấm tròn trên thanh trên chuyển xanh (đã đồng bộ).
 
@@ -69,3 +81,15 @@ Quyền admin: chạy `supabase/setup.sql` trong **SQL Editor** (một lần, ch
   mới cần **đăng nhập lại**; dữ liệu đã đồng bộ sẽ tự tải về.
 - Các thư mục `supabase/`, `deploy/`, `robocon2026/`, file `.ps1`, `.sql`, `.md`
   đã bị chặn truy cập trong cấu hình nginx.
+
+## 6. Tài khoản chính (Admin + Kế toán)
+
+1. **Chạy `supabase/setup.sql`** (bản mới) trong Supabase → SQL Editor. File đã ghi sẵn admin cố định
+   `learntoleap.2023@gmail.com`.
+2. **Admin**: mở app → **Tạo tài khoản** bằng đúng email `learntoleap.2023@gmail.com` (tự đặt mật khẩu)
+   → bấm link xác nhận trong email → đăng nhập. Menu sẽ có **Duyệt chứng từ**, **Thành viên & quyền**.
+3. **Kế toán**: kế toán tự **Tạo tài khoản** bằng email công việc → admin vào **Thành viên & quyền** →
+   chọn người đó → **Vai trò: Kế toán**. (Hoặc thêm cố định trong setup.sql: bỏ `--` ở dòng cuối, thay email, chạy lại.)
+4. **Nhân sự**: tự tạo tài khoản, mặc định là Nhân sự (chỉ thấy dữ liệu của mình).
+
+Quên mật khẩu: kế toán / admin vào **Thành viên & quyền** → **Cấp lại mật khẩu** (cần setup.sql bản mới).
