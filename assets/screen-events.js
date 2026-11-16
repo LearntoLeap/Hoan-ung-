@@ -121,7 +121,7 @@
       '<div class="card"><div class="card-h"><div class="t">' + I('info') + 'Lưu ý</div></div><div class="card-b stack" style="gap:10px">' +
       '<div class="alert info">' + I('info') + '<div><b>Bảng kê:</b> khoản trọn gói không có số lượng → để trống SL, nhập số tiền vào Đơn giá (giống mẫu Excel).</div></div>' +
       '<div class="alert info">' + I('info') + '<div><b>Ngày lập để trống</b> → phiếu in dòng "Hà Nội, ngày ..... tháng ..... năm ....." để ký tay.</div></div>' +
-      '<div class="alert">' + I('shield') + '<div><b>Phân quyền:</b> nhân sự tự tạo tài khoản, chỉ thấy dữ liệu của mình. <b>Kế toán</b> và <b>Quản trị</b> (quyền như nhau) xem tất cả, duyệt chứng từ, đổi vai trò, cấp lại mật khẩu, xem ai đang dùng app.</div></div>' +
+      '<div class="alert">' + I('shield') + '<div><b>Phân quyền:</b> nhân sự tự tạo tài khoản, chỉ thấy dữ liệu của mình. <b>1 Kế toán</b> và <b>1 Quản trị</b> cố định (quyền cao nhất như nhau) xem tất cả, duyệt chứng từ, cấp lại mật khẩu, xem ai đang dùng app.</div></div>' +
       '<div class="alert">' + I('bell') + '<div><b>Thông báo:</b> bấm chuông trên thanh trên → <b>Bật</b> để nhận thông báo trên điện thoại / máy tính / máy tính bảng. iPhone / iPad: Chia sẻ → <b>Thêm vào MH chính</b>, mở app từ biểu tượng rồi bật.</div></div>' +
       '<div class="alert">' + I('clock') + '<div><b>Lịch sử sửa:</b> mọi lần lưu, gửi, duyệt, thêm / xoá chứng từ đều được ghi lại trong tab <b>Lịch sử sửa</b> của từng phiếu.</div></div>' +
       '<div class="alert">' + I('cloud') + '<div><b>Offline:</b> sau lần đăng nhập đầu, app chạy cả khi mất mạng và tự đồng bộ khi có mạng lại (chấm tròn trên thanh trên cùng).</div></div>' +

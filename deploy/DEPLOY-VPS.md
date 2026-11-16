@@ -84,12 +84,13 @@ Quyền admin: chạy `supabase/setup.sql` trong **SQL Editor** (một lần, ch
 
 ## 6. Tài khoản chính (Admin + Kế toán)
 
-1. **Chạy `supabase/setup.sql`** (bản mới) trong Supabase → SQL Editor. File đã ghi sẵn admin cố định
-   `learntoleap.2023@gmail.com`.
-2. **Admin**: mở app → **Tạo tài khoản** bằng đúng email `learntoleap.2023@gmail.com` (tự đặt mật khẩu)
-   → bấm link xác nhận trong email → đăng nhập. Menu sẽ có **Duyệt chứng từ**, **Thành viên & quyền**.
-3. **Kế toán**: kế toán tự **Tạo tài khoản** bằng email công việc → admin vào **Thành viên & quyền** →
-   chọn người đó → **Vai trò: Kế toán**. (Hoặc thêm cố định trong setup.sql: bỏ `--` ở dòng cuối, thay email, chạy lại.)
-4. **Nhân sự**: tự tạo tài khoản, mặc định là Nhân sự (chỉ thấy dữ liệu của mình).
+Hệ thống có đúng 2 tài khoản quyền cao nhất, cố định: **Admin `learntoleap.2023@gmail.com`** và
+**Kế toán `ketoan@learntoleap.vn`** (đổi email ở mục 10 của setup.sql). Không ai đổi vai trò được qua app.
+
+1. Supabase → SQL Editor: chạy toàn bộ **`supabase/setup.sql`**.
+2. SQL Editor → New query: dán **`supabase/tao-tai-khoan.sql`**, thay 2 chỗ `ĐẶT-MẬT-KHẨU-...`
+   bằng mật khẩu bạn tự chọn → **Run**. Hai tài khoản được tạo, email xác nhận sẵn — đăng nhập ngay.
+   (Không lưu mật khẩu vào file trong máy / GitHub. Chạy lại lệnh này = đặt lại mật khẩu.)
+3. **Nhân sự**: tự **Tạo tài khoản** trong app, mặc định là Nhân sự (chỉ thấy dữ liệu của mình).
 
 Quên mật khẩu: kế toán / admin vào **Thành viên & quyền** → **Cấp lại mật khẩu** (cần setup.sql bản mới).

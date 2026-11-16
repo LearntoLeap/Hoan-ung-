@@ -1,7 +1,7 @@
 /* =========================================================================
    admin.js — THÀNH VIÊN & PHÂN QUYỀN (kế toán / quản trị — quyền như nhau)
    • Danh sách mọi tài khoản: vai trò, bộ phận, đang dùng app (trang, thiết bị), số phiếu…
-   • Đổi vai trò (nhân sự / kế toán / quản trị), cấp lại mật khẩu, gửi email đặt lại,
+   • Vai trò cố định (1 Quản trị + 1 Kế toán), cấp lại mật khẩu, gửi email đặt lại,
      khoá / mở khoá tài khoản con
    • Xem dữ liệu từng tài khoản (chỉ đọc) + xuất báo cáo
    ========================================================================= */
@@ -78,7 +78,7 @@
       App.selectBare('ad-role', f.role, [{ v: '', t: 'Mọi vai trò' }, { v: 'staff', t: 'Nhân sự' }, { v: 'ketoan', t: 'Kế toán' }, { v: 'admin', t: 'Quản trị' }]) + '</div></div>' +
       '<div class="tbl-wrap"><table class="tbl cards"><thead><tr><th>Thành viên</th><th>Vai trò</th><th>Bộ phận</th><th>Phiếu</th><th>Hoạt động</th><th class="acts"></th></tr></thead>' +
       '<tbody id="ad-body">' + rowsHTML() + '</tbody></table></div></div>' +
-      '<div class="alert info mt16">' + I('info') + '<div><b>Tài khoản con</b>: nhân sự tự tạo bằng email công việc, mặc định là <b>Nhân sự</b> (chỉ thấy dữ liệu của mình). Kế toán / quản trị có thể đổi vai trò, khoá tài khoản hoặc cấp lại mật khẩu khi nhân sự quên.</div></div>';
+      '<div class="alert info mt16">' + I('info') + '<div><b>Tài khoản con</b>: nhân sự tự tạo bằng email công việc, mặc định là <b>Nhân sự</b> (chỉ thấy dữ liệu của mình). Hệ thống có đúng <b>1 Quản trị</b> và <b>1 Kế toán</b> cố định; kế toán / quản trị có thể khoá tài khoản hoặc cấp lại mật khẩu khi nhân sự quên.</div></div>';
     const q = document.getElementById('ad-q');
     q.oninput = () => { f.q = q.value; document.getElementById('ad-body').innerHTML = rowsHTML(); };
     document.getElementById('ad-role').onchange = (e) => { f.role = e.target.value; document.getElementById('ad-body').innerHTML = rowsHTML(); };
@@ -94,8 +94,8 @@
     const me = F().myId(), self = p.id === me;
     const card = (k, ic, t, d, danger) => '<div class="menu-item" data-mm="' + k + '"><div class="mic"' + (danger ? ' style="background:hsl(var(--nguy-hiem)/.1);color:hsl(var(--nguy-hiem-dam))"' : '') + '>' + I(ic) + '</div><div><div class="mt">' + t + '</div><div class="ms">' + d + '</div></div></div>';
     const ov = App.openSheet(App.sheetHead(p.full_name || p.email, (p.email || '') + ' · ' + F().ROLES[p.role || 'staff'].t) +
-      '<div class="mm-sheet"><div class="field"><label>Vai trò</label><div class="seg" id="mm-role">' + ['staff', 'ketoan', 'admin'].map((r) => '<button class="' + ((p.role || 'staff') === r ? 'on' : '') + '" data-r="' + r + '"' + (self ? ' disabled' : '') + '>' + F().ROLES[r].t + '</button>').join('') + '</div>' +
-      '<div class="hint">' + (self ? 'Không tự đổi vai trò của chính mình (tránh mất quyền).' : 'Nhân sự: chỉ dữ liệu của mình · Kế toán / Quản trị: xem tất cả, duyệt, quản lý thành viên.') + '</div></div>' +
+      '<div class="mm-sheet"><div class="field"><label>Vai trò</label><div>' + F().roleBadge(p.role || 'staff') + ' <span class="badge out">' + I('lock', 12) + 'Cố định</span></div>' +
+      '<div class="hint">Hệ thống chỉ có 1 Quản trị và 1 Kế toán cố định (quyền cao nhất). Mọi tài khoản khác là Nhân sự — chỉ thấy dữ liệu của mình.</div></div>' +
       '<div class="mm-grid">' +
       card('pw', 'key', 'Cấp lại mật khẩu', 'Đặt mật khẩu tạm, gửi qua Zalo') +
       card('mail', 'send', 'Email đặt lại mật khẩu', 'Tự đặt lại qua liên kết email') +

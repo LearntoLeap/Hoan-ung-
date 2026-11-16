@@ -1,8 +1,8 @@
 -- =========================================================================
 -- LtL · Tạm ứng & Hoàn ứng — thiết lập Supabase (chạy trong SQL Editor)
 -- Chạy lại nhiều lần vẫn an toàn (bản v26: phân quyền + quy trình duyệt).
---   • Vai trò: admin / ketoan (quyền như nhau: xem tất cả, duyệt, quản lý thành viên)
---              staff (mặc định khi tự tạo tài khoản: chỉ dữ liệu của mình)
+--   • Vai trò CỐ ĐỊNH: đúng 1 Admin (learntoleap.2023@gmail.com) và 1 Kế toán (ketoan@learntoleap.vn),
+--     quyền cao nhất như nhau. Không ai đổi / thêm được qua app. Mọi tài khoản khác = Nhân sự.
 --   • Kế toán ghi trạng thái duyệt vào ltl_reviews — nhân sự không tự đổi được.
 --     Phiếu "Đã duyệt" / "Đã duyệt chi" bị KHOÁ: máy chủ từ chối sửa / xoá.
 --   • ltl_msgs: trao đổi, yêu cầu giải trình, lịch sử sửa (không sửa / xoá được)
@@ -213,16 +213,7 @@ language plpgsql security definer
 set search_path = public
 as $$
 begin
-  if not public.ltl_is_admin() then raise exception 'Không có quyền'; end if;
-  if p_role not in ('admin', 'ketoan', 'staff') then raise exception 'Vai trò không hợp lệ'; end if;
-  if lower(coalesce(p_email, '')) = lower(coalesce(auth.jwt() ->> 'email', '')) then raise exception 'Không tự đổi vai trò của chính mình'; end if;
-  if p_role = 'staff' then
-    delete from public.ltl_roles where lower(email) = lower(p_email);
-    delete from public.ltl_admins where lower(email) = lower(p_email);
-  else
-    insert into public.ltl_roles (email, role) values (lower(p_email), p_role)
-    on conflict (email) do update set role = excluded.role, updated_at = now();
-  end if;
+  raise exception 'Vai trò Admin / Kế toán là cố định — sửa trong supabase/setup.sql (mục 10)';
 end;
 $$;
 create or replace function public.ltl_set_blocked(p_user uuid, p_blocked boolean)
@@ -321,10 +312,50 @@ begin
   begin alter publication supabase_realtime add table public.ltl_dm; exception when others then null; end;
 end $$;
 
--- 10) TÀI KHOẢN CỐ ĐỊNH
---   Quản trị:
+-- 10) TÀI KHOẢN CỐ ĐỊNH (duy nhất) — đổi email tại đây nếu cần, rồi chạy lại cả file
+delete from public.ltl_roles where lower(email) not in ('learntoleap.2023@gmail.com', 'ketoan@learntoleap.vn');
+insert into public.ltl_roles (email, role) values
+  ('learntoleap.2023@gmail.com', 'admin'),
+  ('ketoan@learntoleap.vn', 'ketoan')
+on conflict (email) do update set role = excluded.role, updated_at = now();
+create unique index if not exists ltl_roles_one_per_role on public.ltl_roles (role);   -- mỗi vai trò đúng 1 người
+delete from public.ltl_admins where lower(email) <> 'learntoleap.2023@gmail.com';
 insert into public.ltl_admins (email) values ('learntoleap.2023@gmail.com') on conflict (email) do nothing;
-insert into public.ltl_roles (email, role) select lower(email), 'admin' from public.ltl_admins
-on conflict (email) do nothing;
---   Kế toán: bỏ dấu "--" ở dòng dưới và thay email kế toán (hoặc đổi vai trò trong app: Thành viên & quyền)
--- insert into public.ltl_roles (email, role) values ('ketoan@learntoleap.vn', 'ketoan') on conflict (email) do update set role = 'ketoan';
+
+-- 11) Tạo / đặt lại mật khẩu tài khoản (email xác nhận sẵn) — CHỈ chạy được trong SQL Editor, app không gọi được.
+create or replace function public.ltl_create_account(p_email text, p_password text, p_name text default '')
+returns uuid
+language plpgsql security definer
+set search_path = public, extensions, auth
+as $$
+declare uid uuid;
+begin
+  if length(coalesce(p_password, '')) < 8 then raise exception 'Mật khẩu tối thiểu 8 ký tự'; end if;
+  select id into uid from auth.users where lower(email) = lower(p_email) limit 1;
+  if uid is null then
+    uid := gen_random_uuid();
+    insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+                            raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+                            confirmation_token, email_change, email_change_token_new, recovery_token)
+    values ('00000000-0000-0000-0000-000000000000', uid, 'authenticated', 'authenticated', lower(p_email),
+            extensions.crypt(p_password, extensions.gen_salt('bf')), now(),
+            '{"provider":"email","providers":["email"]}'::jsonb, jsonb_build_object('full_name', p_name),
+            now(), now(), '', '', '', '');
+    insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    values (gen_random_uuid(), uid, uid::text,
+            jsonb_build_object('sub', uid::text, 'email', lower(p_email), 'email_verified', true),
+            'email', now(), now(), now());
+  else
+    -- đã có (kể cả do người khác đăng ký trước mà chưa xác nhận): đặt mật khẩu mới + xác nhận email
+    update auth.users
+       set encrypted_password = extensions.crypt(p_password, extensions.gen_salt('bf')),
+           email_confirmed_at = coalesce(email_confirmed_at, now()), updated_at = now()
+     where id = uid;
+  end if;
+  update public.ltl_profiles set full_name = coalesce(nullif(p_name, ''), full_name) where id = uid;
+  return uid;
+end;
+$$;
+revoke all on function public.ltl_create_account(text, text, text) from public, anon, authenticated;
+
+-- Tạo 2 tài khoản: chạy file supabase/tao-tai-khoan.sql (gõ mật khẩu ngay trong SQL Editor, KHÔNG lưu vào code)
