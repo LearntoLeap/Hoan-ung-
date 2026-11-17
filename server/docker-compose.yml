@@ -1,0 +1,52 @@
+# =============================================================================
+# LtL · Tạm ứng & Hoàn ứng — chạy trên VPS (không cần Supabase)
+#   db  : PostgreSQL 16 (dữ liệu ở ./data/pgdata)
+#   api : Node — API + giao diện app (thư mục gốc repo, chỉ đọc)
+# Cổng 3010 CHỈ mở trên 127.0.0.1 — aaPanel làm reverse proxy + SSL cho payment.learntoleap.vn
+#   cd /opt/ltl-payment/server && cp .env.example .env  (điền mật khẩu / bí mật ngẫu nhiên)
+#   docker compose up -d --build
+# Cập nhật: cd /opt/ltl-payment && git pull && cd server && docker compose up -d --build
+# =============================================================================
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ltl_payment
+      POSTGRES_USER: ltl_payment
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      LANG: C.UTF-8
+    volumes:
+      - ./data/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ltl_payment -d ltl_payment"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    expose:
+      - "5432"
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://ltl_payment:${POSTGRES_PASSWORD}@db:5432/ltl_payment
+      APP_SECRET: ${APP_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-learntoleap.2023@gmail.com}
+      KETOAN_EMAIL: ${KETOAN_EMAIL:-ketoan@learntoleap.vn}
+      ALLOWED_DOMAINS: ${ALLOWED_DOMAINS:-}
+    volumes:
+      - ..:/web:ro
+    ports:
+      - "127.0.0.1:3010:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 256M

@@ -5,7 +5,7 @@
    - Thư viện / ảnh: dùng bản đã lưu (đổi VERSION khi thay thư viện).
    Đổi VERSION ở mỗi lần phát hành để xoá cache cũ. */
 'use strict';
-const VERSION = 'ltl-v34';
+const VERSION = 'ltl-v35';
 const CORE = 'ltl-core-' + VERSION;
 
 const SHELL = [
@@ -40,7 +40,6 @@ const SHELL = [
   './lib/docx.js',
   './lib/exceljs.min.js',
   './lib/chart.umd.min.js',
-  './lib/supabase.js',
   './lib/jspdf.umd.min.js',
   './lib/html2canvas.min.js',
   './icons/icon-192.png',

@@ -7,7 +7,7 @@
    • Trao đổi + yêu cầu giải trình + lịch sử sửa theo từng phiếu (ltl_msgs)
    • Thông báo trong app + thông báo thiết bị (ltl_notifs), nhắc việc hằng tháng
    • Theo dõi tạm ứng → hoàn ứng → nộp lại / DNTT bù, phân loại DNTT, hoá đơn
-   Hai "máy chủ": Supabase (thật) và DemoSrv (dùng thử, nhiều tài khoản trên 1 máy).
+   Hai "máy chủ": máy chủ riêng trên VPS (/api) và DemoSrv (dùng thử, nhiều tài khoản trên 1 máy).
    ========================================================================= */
 (function () {
   'use strict';
@@ -66,66 +66,42 @@
     return kind + ' · ' + br + (matchMedia && matchMedia('(display-mode: standalone)').matches ? ' (app)' : '');
   };
 
-  /* ============================== Máy chủ thật (Supabase) ============================== */
-  const C = () => CL().client;
-  async function q(p) { const { data, error } = await p; if (error) throw error; return data; }
-  async function pagedQ(build) {
-    const out = [];
-    for (let f = 0; ; f += 1000) { const d = await q(build().range(f, f + 999)); out.push(...(d || [])); if (!d || d.length < 1000) break; }
-    return out;
-  }
+  /* ============================== Máy chủ riêng trên VPS (/api) ============================== */
+  const C = () => null;   // không còn realtime của Supabase — cập nhật bằng vòng hỏi định kỳ (30 giây)
+  const A = (m, p, b) => CL().api(m, p, b);
+  const enc = encodeURIComponent;
   async function b64ToBlob(u) { const r = await fetch(u); return r.blob(); }
   const Real = {
-    async role() {
-      try { const r = await q(C().rpc('ltl_role')); if (r) return String(r); } catch (e) {}
-      try { return (await q(C().rpc('ltl_is_admin'))) === true ? 'admin' : 'staff'; } catch (e) { return null; }
-    },
-    async reviews() { return pagedQ(() => C().from('ltl_reviews').select('owner,doc_id,updated_at,data').order('doc_id')); },
-    async putReview(owner, docId, data) { await q(C().from('ltl_reviews').upsert({ owner, doc_id: docId, updated_at: U.nowISO(), data }, { onConflict: 'owner,doc_id' })); },
-    async msgs(owner, docId) { return q(C().from('ltl_msgs').select('id,owner,doc_id,at,author,data').eq('owner', owner).eq('doc_id', docId).order('at')); },
-    async msgsKind(kind) { return pagedQ(() => C().from('ltl_msgs').select('id,owner,doc_id,at,author,data').eq('data->>kind', kind).order('at')); },
-    async addMsg(m) { await q(C().from('ltl_msgs').insert(m)); },
-    async notifs(since) { return q(C().from('ltl_notifs').select('id,at,to_user,to_acc,author,data').gte('at', since).order('at', { ascending: false }).limit(200)); },
-    async addNotif(n) { await q(C().from('ltl_notifs').insert(n)); },
-    async profiles() {
-      let p;
-      try { p = await pagedQ(() => C().from('ltl_profiles').select('id,email,full_name,dept,position,created_at,last_seen,page,device').order('id')); }
-      catch (e) { p = await pagedQ(() => C().from('ltl_profiles').select('id,email,full_name,dept,position,created_at,last_seen').order('id')); }
-      let roles = [], blocked = [];
-      try { roles = await q(C().from('ltl_roles').select('email,role')); } catch (e) {}
-      try { blocked = await q(C().from('ltl_blocked').select('user_id')); } catch (e) {}
-      const rm = {}; (roles || []).forEach((r) => { rm[String(r.email || '').toLowerCase()] = r.role; });
-      const bl = new Set((blocked || []).map((b) => b.user_id));
-      return p.map((x) => Object.assign(x, { role: rm[String(x.email || '').toLowerCase()] || 'staff', blocked: bl.has(x.id) }));
-    },
-    async setRole(email, role) { await q(C().rpc('ltl_set_role', { p_email: email, p_role: role })); },
-    async setBlocked(uid, b) { await q(C().rpc('ltl_set_blocked', { p_user: uid, p_blocked: !!b })); },
-    async setPassword(uid, pw) { await q(C().rpc('ltl_admin_set_password', { p_user: uid, p_password: pw })); },
-    async sendReset(email) { const { error } = await C().auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname }); if (error) throw error; },
-    async ping(info) {
-      try { await q(C().from('ltl_profiles').update({ last_seen: U.nowISO(), page: info.page, device: info.device }).eq('id', Flow.myId())); }
-      catch (e) { await q(C().from('ltl_profiles').update({ last_seen: U.nowISO() }).eq('id', Flow.myId())); }
-    },
+    async role() { return (await A('GET', '/auth/me')).user.role; },
+    async reviews() { return (await A('GET', '/reviews')).rows || []; },
+    async putReview(owner, docId, data) { await A('PUT', '/reviews', { owner, doc_id: docId, data }); },
+    async msgs(owner, docId) { return (await A('GET', '/msgs?owner=' + enc(owner) + '&doc=' + enc(docId))).rows || []; },
+    async msgsKind(kind) { return (await A('GET', '/msgs?kind=' + enc(kind))).rows || []; },
+    async addMsg(m) { await A('POST', '/msgs', m); },
+    async notifs(since) { return (await A('GET', '/notifs?since=' + enc(since))).rows || []; },
+    async addNotif(n) { await A('POST', '/notifs', n); },
+    async profiles() { return (await A('GET', '/profiles')).rows || []; },
+    async setRole() { throw new Error('Vai trò Quản trị / Kế toán là cố định'); },
+    async setBlocked(uid, b) { await A('POST', '/admin/block', { user: uid, blocked: !!b }); },
+    async setPassword(uid, pw) { await A('POST', '/admin/password', { user: uid, password: pw }); },
+    async sendReset() { throw new Error('Hệ thống không gửi email — dùng “Cấp lại mật khẩu”'); },
+    async ping(info) { await A('POST', '/ping', info); },
     async allRecords() { return CL().admin.allData(); },
-    async contacts() { return (await q(C().rpc('ltl_contacts'))) || []; },
-    async dms() { return pagedQ(() => C().from('ltl_dm').select('id,at,from_user,to_user,data').order('at')); },
-    async dmSend(m) { await q(C().from('ltl_dm').insert(m)); },
-    async deleteUser(uid) { await q(C().rpc('ltl_delete_user', { p_user: uid })); },
+    async contacts() { return (await A('GET', '/contacts')).rows || []; },
+    async dms() { return (await A('GET', '/dm')).rows || []; },
+    async dmSend(m) { await A('POST', '/dm', m); },
+    async deleteUser(uid) { await A('POST', '/admin/delete', { user: uid }); },
     async docImages(owner, doc) {
-      const conv = async (rows) => {
-        const out = [];
-        for (const r of rows || []) {
-          const d = r.data || {}; if (d._deleted) continue;
-          const rec = Object.assign({}, d, { id: r.id }); delete rec.b64;
-          if (d.b64 && !d._skipped) { try { rec.blob = await b64ToBlob(d.b64); } catch (e) {} }
-          out.push(rec);
-        }
-        return out;
-      };
       const ex = (doc.items || []).map((i) => i.expenseId).filter((x) => x && U.isId(x));
-      const a = await q(C().from('ltl_records').select('id,data').eq('owner', owner).eq('kind', 'image').eq('data->>docId', doc.id));
-      const b = ex.length ? await q(C().from('ltl_records').select('id,data').eq('owner', owner).eq('kind', 'image').in('data->>expenseId', ex)) : [];
-      return conv((a || []).concat(b || []));
+      const { rows } = await A('GET', '/all/images?owner=' + enc(owner) + '&doc=' + enc(doc.id) + '&exp=' + enc(ex.join(',')));
+      const out = [];
+      for (const r of rows || []) {
+        const d = r.data || {}; if (d._deleted) continue;
+        const rec = Object.assign({}, d, { id: r.id }); delete rec.b64;
+        if (d.b64 && !d._skipped) { try { rec.blob = await b64ToBlob(d.b64); } catch (e) {} }
+        out.push(rec);
+      }
+      return out;
     },
   };
   Flow.B = () => (CL().demo && App.DemoSrv ? App.DemoSrv.api : Real);

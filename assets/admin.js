@@ -98,7 +98,6 @@
       '<div class="hint">Hệ thống chỉ có 1 Quản trị và 1 Kế toán cố định (quyền cao nhất). Mọi tài khoản khác là Nhân sự — chỉ thấy dữ liệu của mình.</div></div>' +
       '<div class="mm-grid">' +
       card('pw', 'key', 'Cấp lại mật khẩu', 'Đặt mật khẩu tạm, gửi qua Zalo') +
-      card('mail', 'send', 'Email đặt lại mật khẩu', 'Tự đặt lại qua liên kết email') +
       '<a class="menu-item" href="#/tai-khoan/' + esc(p.id) + '"><div class="mic">' + I('eye') + '</div><div><div class="mt">Xem dữ liệu</div><div class="ms">Phiếu, khoản chi, sự kiện</div></div></a>' +
       '<a class="menu-item" href="#/tin-nhan/' + esc(p.id) + '"><div class="mic">' + I('chat') + '</div><div><div class="mt">Nhắn tin riêng</div><div class="ms">Chỉ hai người thấy</div></div></a>' +
       (self ? '' : card('block', p.blocked ? 'unlock' : 'lock', p.blocked ? 'Mở khoá tài khoản' : 'Khoá tài khoản', p.blocked ? 'Cho ghi dữ liệu trở lại' : 'Không thêm / sửa được dữ liệu', !p.blocked) +

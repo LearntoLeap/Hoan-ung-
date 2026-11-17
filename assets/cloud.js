@@ -1,9 +1,8 @@
 /* =========================================================================
-   cloud.js — Tài khoản (Supabase Auth) + đồng bộ đám mây, offline-first.
+   cloud.js — Tài khoản + đồng bộ với MÁY CHỦ RIÊNG trên VPS (/api), offline-first.
    - Bắt buộc đăng nhập. Mỗi tài khoản chỉ thấy dữ liệu của chính mình
-     (RLS owner = auth.uid() trên bảng ltl_records + chỉ lọc owner khi đồng bộ).
-   - 1 tài khoản quản trị (bảng ltl_admins) được ĐỌC dữ liệu mọi tài khoản để
-     kiểm soát — không sửa được dữ liệu của người khác.
+     (máy chủ chỉ trả dữ liệu của người đăng nhập).
+   - 1 Quản trị + 1 Kế toán cố định được ĐỌC dữ liệu mọi tài khoản để kiểm soát.
    - IndexedDB là nguồn chính; hợp nhất theo updatedAt (last-write-wins).
    - Xoá: xoá ngay trên đám mây nếu online, nếu offline thì ghi "bia mộ" để xoá
      ở lần đồng bộ sau (tránh bản ghi đã xoá sống lại).
@@ -14,7 +13,6 @@
   if (!App) return;
   const esc = U.esc, I = App.icon;
 
-  const TABLE = 'ltl_records';
   const OWNER_KEY = 'ltl_owner';
   const TOMB_KEY = 'ltl_tombs';
   const SYNCED = { events: 'event', advances: 'advance', expenses: 'expense', images: 'image', settings: 'settings', docs: 'doc' };
@@ -28,34 +26,44 @@
   };
   App.cloud = Cloud;
 
-  // Kết nối Supabase nhúng sẵn (anon key là khoá công khai; dữ liệu được bảo vệ bằng RLS).
-  const CFG = {
-    url: 'https://ddjujhydpvnsnckwnmyf.supabase.co',
-    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkanVqaHlkcHZuc25ja3dubXlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NDEzNTEsImV4cCI6MjA5NTExNzM1MX0.vvNKQDtyfhaVyeeNi1uiJeS5oKQEQOrrAgsgLAE3Hgo',
-  };
-  Cloud.ready = () => !!(Cloud.client && Cloud.user && navigator.onLine && !Cloud.demo);
-  // Chế độ demo CHỈ dùng khi chạy thử trên máy (localhost): không kết nối đám mây.
+  // Máy chủ riêng: cùng tên miền, đường dẫn /api (aaPanel → Node trên VPS)
+  const API_BASE = (window.LTL_API || '') + '/api';
+  const TOKEN_KEY = 'ltl_token', USER_KEY = 'ltl_user';
+  Cloud.ready = () => !!(Cloud.user && Cloud.token && navigator.onLine && !Cloud.demo);
+  try { Cloud.token = localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { Cloud.token = ''; }
+  async function api(method, path, body) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (Cloud.token) headers.Authorization = 'Bearer ' + Cloud.token;
+    const r = await fetch(API_BASE + path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+    let j = null; try { j = await r.json(); } catch (e) {}
+    if (r.status === 401 && Cloud.token && !/^\/auth\/(login|signup)/.test(path)) sessionExpired();
+    if (!r.ok) { const e = new Error((j && j.error) || ('Máy chủ trả lỗi ' + r.status)); e.status = r.status; throw e; }
+    return j || {};
+  }
+  Cloud.api = api;
+  function toUser(u) { return u ? { id: u.id, email: u.email, role: u.role, blocked: !!u.blocked, user_metadata: { full_name: u.full_name || '', dept: u.dept || '' } } : null; }
+  function setSession(res) {
+    Cloud.token = res.token || Cloud.token; Cloud.user = toUser(res.user);
+    try { localStorage.setItem(TOKEN_KEY, Cloud.token); localStorage.setItem(USER_KEY, JSON.stringify(res.user)); } catch (e) {}
+  }
+  // mật khẩu bị đổi / phiên hết hạn: về màn đăng nhập, GIỮ dữ liệu trên máy (đăng nhập lại cùng tài khoản sẽ đồng bộ tiếp)
+  function sessionExpired() {
+    if (!Cloud.token) return;
+    Cloud.token = ''; try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+    if (App.Flow) App.Flow.stop();
+    Cloud.user = null; setState('signedout');
+    App.toast('Phiên đăng nhập hết hạn hoặc mật khẩu đã đổi — vui lòng đăng nhập lại', 'err');
+    if (App.afterLogout) App.afterLogout();
+  }
+    // Chế độ demo CHỈ dùng khi chạy thử trên máy (localhost): không kết nối đám mây.
   const LOCAL_DEV = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
   if (LOCAL_DEV && /[?&]demo=(1|admin)/.test(location.search)) { try { localStorage.setItem('ltl_demo', /demo=admin/.test(location.search) ? 'admin' : '1'); } catch (e) {} }
   // Dùng thử: chạy hoàn toàn trên máy, không cần tài khoản, không đồng bộ
   Cloud.isDemo = () => !!Cloud.demo;
 
   async function ensureClient() {
-    if (Cloud.client) return Cloud.client;
-    const lib = await App.ensureLib('supabase');
-    const createClient = (lib && lib.createClient) || (window.supabase && window.supabase.createClient);
-    if (!createClient) throw new Error('Không tải được thư viện Supabase');
-    Cloud.client = createClient(CFG.url, CFG.key, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'ltl-auth', detectSessionInUrl: true } });
-    Cloud.client.auth.onAuthStateChange((evt, session) => {
-      Cloud.user = (session && session.user) || null;
-      if (evt === 'PASSWORD_RECOVERY') setTimeout(openNewPassword, 300);
-      updateBadge();
-    });
-    try {
-      const { data } = await Cloud.client.auth.getSession();
-      Cloud.user = (data && data.session && data.session.user) || null;
-    } catch (e) { Cloud.user = null; }
-    return Cloud.client;
+    if (!Cloud.user && Cloud.token) { try { Cloud.user = toUser(JSON.parse(localStorage.getItem(USER_KEY) || 'null')); } catch (e) { Cloud.user = null; } }
+    return true;
   }
 
   /* ----------------------------- Trạng thái ----------------------------- */
@@ -91,24 +99,18 @@
 
   /* ----------------------------- Auth ----------------------------- */
   async function signIn(email, password) {
-    const c = await ensureClient();
-    const { data, error } = await c.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    Cloud.user = (data && data.user) || null;
+    setSession(await api('POST', '/auth/login', { email, password }));
   }
   async function signUp(email, password, meta) {
-    const c = await ensureClient();
-    const { data, error } = await c.auth.signUp({ email, password, options: { data: meta || {}, emailRedirectTo: location.origin + location.pathname } });
-    if (error) throw error;
-    Cloud.user = (data && data.session && data.user) || null;
-    return data;
+    setSession(await api('POST', '/auth/signup', { email, password, name: (meta || {}).full_name || '', dept: (meta || {}).dept || '' }));
+    return { session: true };
   }
   async function signOut() {
     const wasDemo = Cloud.demo;
     if (App.Flow) App.Flow.stop();
     if (wasDemo) { try { localStorage.removeItem('ltl_demo'); } catch (e) {} Cloud.demo = false; if (App.Demo) await App.Demo.wipe(); }
-    else if (Cloud.client) { try { await Cloud.client.auth.signOut(); } catch (e) {} }
-    Cloud.user = null; Cloud.isAdmin = false; Cloud.role = 'staff';
+    Cloud.token = ''; try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); } catch (e) {}
+    Cloud.user = null; Cloud.isAdmin = false; Cloud.role = 'staff'; authTab = 'login';
     await clearLocalData();
     try { localStorage.removeItem(OWNER_KEY); } catch (e) {}
     setState('signedout');
@@ -130,7 +132,7 @@
     if (Cloud.demo) return;
     if (!Cloud.ready()) { cachedRole(); return; }
     let r = null;
-    try { r = App.Flow ? await App.Flow.B().role() : null; } catch (e) { r = null; }
+    try { const me = await api('GET', '/auth/me'); r = me.user.role; try { localStorage.setItem(USER_KEY, JSON.stringify(me.user)); } catch (e) {} Cloud.user.blocked = !!me.user.blocked; } catch (e) { r = null; }
     if (r == null) { cachedRole(); return; }
     setRole(r);
     try { localStorage.setItem(ROLE_KEY(Cloud.user.id), Cloud.role); } catch (e) {}
@@ -140,12 +142,7 @@
     if (!Cloud.ready()) return;
     const s = App.settings || {};
     const meta = (Cloud.user && Cloud.user.user_metadata) || {};
-    try {
-      await Cloud.client.from('ltl_profiles').upsert({
-        id: Cloud.user.id, email: Cloud.user.email, full_name: s.hoTen || meta.full_name || '',
-        dept: s.boPhan || meta.dept || '', position: s.chucVu || '', last_seen: new Date().toISOString(),
-      }, { onConflict: 'id' });
-    } catch (e) {}
+    try { await api('PUT', '/profile', { full_name: s.hoTen || meta.full_name || '', dept: s.boPhan || meta.dept || '', position: s.chucVu || '' }); } catch (e) {}
   }
   Cloud.upsertProfile = upsertProfile;
 
@@ -211,7 +208,7 @@
       data = Object.assign({}, item.rec, { updatedAt: item.updated_at });
       if (item.kind === 'doc' && App.Docs) data.total = App.Docs.total(item.rec);
     }
-    return { owner: Cloud.user.id, id: item.id, kind: item.kind, updated_at: item.updated_at, data };
+    return { id: item.id, kind: item.kind, updated_at: item.updated_at, data };
   }
   // làm sạch mã định danh trong dữ liệu kéo về (chặn chèn mã qua id)
   const ID_FIELDS = ['eventId', 'expenseId', 'docId', 'tuDocId', 'huDocId', 'itemId', 'legacyId'];
@@ -246,29 +243,14 @@
   function addTomb(id, kind) { const t = tombs(); if (!t.some((x) => x.id === id)) { t.push({ id, kind, at: U.nowISO() }); saveTombs(t); } }
   Cloud.pendingDeletes = () => tombs().length;
 
-  async function pagedMeta(owner) {
-    const out = [];
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await Cloud.client.from(TABLE).select('id,kind,updated_at,del:data->>_deleted').eq('owner', owner).order('id').range(from, from + 999);
-      if (error) throw error;
-      out.push(...(data || []));
-      if (!data || data.length < 1000) break;
-    }
-    return out;
-  }
+  async function pagedMeta() { return (await api('GET', '/sync/meta')).rows || []; }
   // rejected: Set nhận id các dòng máy chủ từ chối (phiếu đã được kế toán khoá) — bỏ qua, không làm hỏng cả lô
   async function upsertBatches(rows, rejected) {
     let batch = [], bytes = 0;
     const flush = async () => {
       if (!batch.length) return;
-      const { error } = await Cloud.client.from(TABLE).upsert(batch, { onConflict: 'owner,id' });
-      if (error) {
-        if (!rejected || !/row-level security|42501|policy/i.test(String(error.message || '') + ' ' + (error.code || ''))) throw error;
-        for (const one of batch) {
-          const r2 = await Cloud.client.from(TABLE).upsert([one], { onConflict: 'owner,id' });
-          if (r2.error) { if (/row-level security|42501|policy/i.test(String(r2.error.message || '') + ' ' + (r2.error.code || ''))) rejected.add(String(one.id)); else throw r2.error; }
-        }
-      }
+      const res = await api('POST', '/sync/push', { rows: batch });
+      (res.rejected || []).forEach((id) => { if (rejected) rejected.add(String(id)); });
       batch = []; bytes = 0;
     };
     for (const r of rows) {
@@ -287,7 +269,7 @@
     if (!navigator.onLine) { setState('offline'); if (opts.loud) App.toast('Đang offline — sẽ đồng bộ khi có mạng', 'err'); return false; }
     if (Cloud.state === 'syncing') { Cloud._again = true; return false; }
     setState('syncing');
-    const owner = Cloud.user.id, startedAt = Date.now();
+    const startedAt = Date.now();
     let pushed = 0, pulled = 0, removed = 0;
     try {
       // 0) đẩy các lần xoá (bia mộ) lên server
@@ -298,12 +280,12 @@
         const now = U.nowISO();
         // phiếu đã khoá không được xoá → bỏ bia mộ, lần kéo về sẽ khôi phục
         const okT = t.filter((x) => !(x.kind === 'doc' && locked(x.id)));
-        await upsertBatches(okT.map((x) => ({ owner, id: x.id, kind: x.kind || 'doc', updated_at: x.at || now, data: { _deleted: true } })), rejected);
+        await upsertBatches(okT.map((x) => ({ id: x.id, kind: x.kind || 'doc', updated_at: x.at || now, data: { _deleted: true } })), rejected);
         const done = new Set(t.map((x) => x.id));
         saveTombs(tombs().filter((x) => !done.has(x.id)));   // giữ bia mộ phát sinh trong lúc đẩy
       }
       const localRows = await gatherLocal();
-      const remoteMeta = await pagedMeta(owner);
+      const remoteMeta = await pagedMeta();
       const remoteMap = new Map(remoteMeta.map((r) => [String(r.id), r]));
       const localMap = new Map(localRows.map((r) => [r.id, r]));
       const ids = new Set([...remoteMap.keys(), ...localMap.keys()]);
@@ -326,8 +308,7 @@
       }
       for (const L of toDelete) { await _del(L.store, L.id); removed++; }
       for (let i = 0; i < toLocalIds.length; i += 12) {
-        const { data: rows, error: e3 } = await Cloud.client.from(TABLE).select('id,kind,updated_at,data').eq('owner', owner).in('id', toLocalIds.slice(i, i + 12));
-        if (e3) throw e3;
+        const { rows } = await api('POST', '/sync/pull', { ids: toLocalIds.slice(i, i + 12) });
         for (const R of (rows || [])) if (await applyRemoteToLocal(R, localMap)) pulled++;
       }
       Cloud.lastSync = U.nowISO();
@@ -445,7 +426,7 @@
           '<form id="auth-form" novalidate>' + ui.text('au-name', 'Họ và tên', '', { auto: 'name', ph: 'Nguyễn Văn A', req: true }) +
           ui.text('au-dept', 'Bộ phận', '', { list: 'au-dl', ph: 'Chọn hoặc gõ bộ phận' }) + ui.datalist('au-dl', App.DEFAULT_SETTINGS.boPhanList) +
           ui.text('au-email', 'Email', '', { type: 'email', auto: 'username', req: true }) +
-          ui.text('au-pass', 'Mật khẩu', '', { type: 'password', auto: 'new-password', ph: 'Tối thiểu 6 ký tự', req: true }) +
+          ui.text('au-pass', 'Mật khẩu', '', { type: 'password', auto: 'new-password', ph: 'Tối thiểu 8 ký tự', req: true }) +
           '<button class="btn dark block lg" type="submit" id="au-go">Tạo tài khoản</button></form>' +
           '<div class="center mt16 muted" style="font-size:13.5px">Đã có tài khoản? <a href="#" data-act="authTab:login"><b class="grad-text">Đăng nhập</b></a></div>') +
       (!navigator.onLine ? '<div class="alert warn mt16">' + I('alert') + '<div>Đang offline. Lần đăng nhập đầu tiên trên máy này cần có mạng.</div></div>' : '') +
@@ -462,7 +443,7 @@
     const btn = document.getElementById('au-go');
     const email = App.val('au-email').toLowerCase(), pass = (document.getElementById('au-pass') || {}).value || '';
     if (!/^\S+@\S+\.\S+$/.test(email)) { App.toast('Email chưa hợp lệ', 'err'); return; }
-    if (pass.length < 6) { App.toast('Mật khẩu tối thiểu 6 ký tự', 'err'); return; }
+    if (pass.length < (authTab === 'signup' ? 8 : 1)) { App.toast(authTab === 'signup' ? 'Mật khẩu tối thiểu 8 ký tự' : 'Nhập mật khẩu', 'err'); return; }
     btn.disabled = true;
     try {
       if (authTab === 'signup') {
@@ -481,59 +462,34 @@
       await onSignedIn();
     } catch (e) {
       const m = String(e.message || e);
-      App.toast(/Invalid login/i.test(m) ? 'Sai email hoặc mật khẩu' : /already registered/i.test(m) ? 'Email này đã có tài khoản — hãy đăng nhập' :
-        /Email not confirmed/i.test(m) ? 'Email chưa được xác nhận — kiểm tra hộp thư' : 'Lỗi: ' + m, 'err');
+      App.toast(/fetch|network/i.test(m) ? 'Không kết nối được máy chủ — kiểm tra mạng' : m, 'err');
       if (btn) btn.disabled = false;
     }
   }
 
   function openNewPassword() {
-    const ov = App.openSheet(App.sheetHead('Đặt mật khẩu mới') + App.ui.text('np-pass', 'Mật khẩu mới', '', { type: 'password', auto: 'new-password' }) +
-      '<div class="sheet-f"><button class="btn" id="np-ok">Lưu mật khẩu</button></div>', { center: true });
+    const ov = App.openSheet(App.sheetHead('Đổi mật khẩu') + App.ui.text('np-old', 'Mật khẩu hiện tại', '', { type: 'password', auto: 'current-password' }) +
+      App.ui.text('np-pass', 'Mật khẩu mới (tối thiểu 8 ký tự)', '', { type: 'password', auto: 'new-password' }) +
+      App.ui.text('np-pass2', 'Nhập lại mật khẩu mới', '', { type: 'password', auto: 'new-password' }) +
+      '<div class="sheet-f"><button class="btn out" data-act="closeTop">Huỷ</button><button class="btn" id="np-ok">Lưu mật khẩu</button></div>', { center: true });
     ov.querySelector('#np-ok').onclick = async () => {
-      const p = ov.querySelector('#np-pass').value;
-      if (p.length < 6) { App.toast('Mật khẩu tối thiểu 6 ký tự', 'err'); return; }
-      const { error } = await Cloud.client.auth.updateUser({ password: p });
-      if (error) { App.toast('Lỗi: ' + error.message, 'err'); return; }
-      App.closeSheet(ov); App.toast('Đã đổi mật khẩu', 'ok');
+      const o = ov.querySelector('#np-old').value, p = ov.querySelector('#np-pass').value, p2 = ov.querySelector('#np-pass2').value;
+      if (p.length < 8) { App.toast('Mật khẩu mới tối thiểu 8 ký tự', 'err'); return; }
+      if (p !== p2) { App.toast('Hai lần nhập mật khẩu mới không khớp', 'err'); return; }
+      try { const r = await api('POST', '/auth/password', { old: o, password: p }); Cloud.token = r.token; try { localStorage.setItem(TOKEN_KEY, r.token); } catch (e) {} App.closeSheet(ov); App.toast('Đã đổi mật khẩu', 'ok'); }
+      catch (e) { App.toast(e.message || String(e), 'err'); }
     };
   }
   Cloud.openNewPassword = openNewPassword;
 
   /* ----------------------------- API cho trang quản trị ----------------------------- */
-  // đọc theo trang 1000 dòng; bỏ dòng đã xoá và dòng có mã không hợp lệ
-  async function paged(build) {
-    const out = [];
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await build().range(from, from + 999);
-      if (error) throw error;
-      out.push(...(data || []));
-      if (!data || data.length < 1000) break;
-    }
-    return out;
-  }
-  const okRow = (r) => r && U.isId(String(r.id || 'x')) && !(r.del || (r.data && r.data._deleted));
+  const okRow = (r) => r && U.isId(String(r.id || 'x')) && !(r.data && r.data._deleted);
   const cleanRow = (r) => { if (r.data) r.data = cleanIds(Object.assign({}, r.data)); return r; };
   Cloud.admin = {
-    async profiles() {
-      return paged(() => Cloud.client.from('ltl_profiles').select('id,email,full_name,dept,position,created_at,last_seen').order('last_seen', { ascending: false }));
-    },
-    // tóm tắt mọi bản ghi (không kéo ảnh) để đếm phiếu / tiền theo tài khoản
-    async summary() {
-      const rows = await paged(() => Cloud.client.from(TABLE).select('owner,id,kind,updated_at,del:data->>_deleted,trashed:data->>deletedAt,type:data->>type,total:data->>total,amount:data->>amount').neq('kind', 'image').neq('kind', 'settings').order('id'));
-      return rows.filter((r) => okRow(r) && !r.trashed);
-    },
+    async profiles() { return (await api('GET', '/profiles')).rows || []; },
     // toàn bộ dữ liệu (trừ ảnh) của mọi tài khoản
-    async allData() {
-      const rows = await paged(() => Cloud.client.from(TABLE).select('owner,id,kind,updated_at,data').in('kind', ['doc', 'event', 'expense', 'settings']).order('id'));
-      return rows.filter((r) => okRow(r) && !(r.data && r.data.deletedAt)).map(cleanRow);
-    },
-    async ownerData(ownerId) {
-      const rows = await paged(() => Cloud.client.from(TABLE).select('id,kind,updated_at,data').eq('owner', ownerId).in('kind', ['doc', 'event', 'expense', 'settings']).order('id'));
-      return rows.filter((r) => okRow(r) && !(r.data && r.data.deletedAt)).map(cleanRow);
-    },
+    async allData() { return ((await api('GET', '/all/records')).rows || []).filter((r) => okRow(r) && !(r.data && r.data.deletedAt)).map(cleanRow); },
   };
-
 
   /* ----------------------------- Actions ----------------------------- */
   Object.assign(App.actions, {
@@ -547,15 +503,9 @@
       }
       App.demoPicker();
     },
-    async forgotPass() {
-      const email = App.val('au-email');
-      if (!/^\S+@\S+\.\S+$/.test(email)) { App.toast('Nhập email ở ô trên trước', 'err'); return; }
-      try {
-        await ensureClient();
-        const { error } = await Cloud.client.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-        if (error) throw error;
-        App.toast('Đã gửi email đặt lại mật khẩu', 'ok');
-      } catch (e) { App.toast('Lỗi: ' + (e.message || e), 'err'); }
+    forgotPass() {
+      App.openSheet(App.sheetHead('Quên mật khẩu') + '<p class="muted" style="margin:0 0 12px">Liên hệ <b>Kế toán</b> hoặc <b>Quản trị</b> để được cấp mật khẩu tạm (mục Thành viên & quyền → Cấp lại mật khẩu). Đăng nhập xong hãy đổi lại mật khẩu ở Hồ sơ cá nhân.</p>' +
+        '<div class="sheet-f"><button class="btn" data-act="closeTop">Đã hiểu</button></div>', { center: true });
     },
     async syncNow() { try { await sync({ loud: true }); } catch (e) {} },
     logout() {
@@ -567,7 +517,7 @@
       App.toast('Đang đồng bộ trước khi đăng xuất…');
       Cloud.flush().catch(() => false).then((ok) => {
         if (ok) {
-          App.confirmSheet('Đăng xuất?', 'Dữ liệu đã đồng bộ lên đám mây và sẽ được xoá khỏi máy này để bảo mật. Đăng nhập lại sẽ tự tải về.', doOut, false, 'Đăng xuất');
+          App.confirmSheet('Đăng xuất?', 'Dữ liệu đã đồng bộ lên máy chủ và sẽ được xoá khỏi máy này để bảo mật. Đăng nhập lại sẽ tự tải về.', doOut, false, 'Đăng xuất');
         } else {
           App.confirmSheet('Chưa đồng bộ được — vẫn đăng xuất?', (navigator.onLine ? 'Đồng bộ đang lỗi.' : 'Máy đang mất mạng.') + ' Nếu đăng xuất bây giờ, các thay đổi chưa đồng bộ trên máy này sẽ bị MẤT. Nên kết nối mạng, bấm chấm tròn đồng bộ trên thanh trên, rồi đăng xuất sau.', doOut, true, 'Vẫn đăng xuất');
         }

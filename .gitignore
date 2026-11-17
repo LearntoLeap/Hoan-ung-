@@ -15,3 +15,7 @@ Thumbs.db
 
 .vercel
 .vercel.old-account
+
+# Máy chủ VPS: bí mật + dữ liệu
+server/.env
+server/data/
