@@ -33,10 +33,10 @@ function ask(question) {
   const p2 = await ask('Nhập lại mật khẩu: ');
   if (p1 !== p2) { console.log('Hai lần nhập không khớp.'); process.exit(1); }
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  const { rows } = await pool.query(`insert into users (email, pass_hash, full_name) values ($1,$2,$3)
-      on conflict (email) do update set pass_hash = excluded.pass_hash, pass_changed_at = now(),
+  const { rows } = await pool.query(`insert into users (email, pass_hash, full_name, must_change) values ($1,$2,$3,true)
+      on conflict (email) do update set pass_hash = excluded.pass_hash, pass_changed_at = now(), must_change = true,
         full_name = coalesce(nullif(excluded.full_name, ''), users.full_name), blocked = false
       returning id, email, full_name`, [email, hashPass(p1), name || '']);
-  console.log('Đã lưu tài khoản:', rows[0].email, '·', rows[0].full_name || '');
+  console.log('Đã lưu tài khoản:', rows[0].email, '·', rows[0].full_name || '', '— mật khẩu TẠM, lần đăng nhập đầu sẽ bắt đổi.');
   await pool.end();
 })().catch((e) => { console.error('Lỗi:', e.message); process.exit(1); });

@@ -56,7 +56,7 @@ function readToken(tok) {
   if (sig.length !== good.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null;
   try { const d = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString()); return d.exp > Date.now() ? d : null; } catch (e) { return null; }
 }
-const pub = (u) => ({ id: u.id, email: u.email, full_name: u.full_name, dept: u.dept, position: u.position, role: roleOf(u.email), blocked: u.blocked });
+const pub = (u) => ({ id: u.id, email: u.email, full_name: u.full_name, dept: u.dept, position: u.position, role: roleOf(u.email), blocked: u.blocked, must_change: !!u.must_change });
 
 // chống dò mật khẩu: tối đa 10 lần sai / 10 phút / IP + email
 const fails = new Map();
@@ -76,6 +76,7 @@ function send(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
   res.end(s);
 }
+const MUST_OK = new Set(['GET /api/auth/me', 'POST /api/auth/password']);
 async function authUser(req) {
   const h = req.headers.authorization || '';
   const t = readToken(h.startsWith('Bearer ') ? h.slice(7) : '');
@@ -84,6 +85,8 @@ async function authUser(req) {
   const u = rows[0];
   if (!u || new Date(u.pass_changed_at).getTime() !== t.pc) throw new HttpErr(401, 'Phiên đăng nhập hết hạn — đăng nhập lại');
   u.role = roleOf(u.email);
+  // đang dùng mật khẩu tạm: chỉ được xem thông tin của mình và đổi mật khẩu
+  if (u.must_change && !MUST_OK.has(req.method + ' ' + new URL(req.url, 'http://x').pathname)) throw new HttpErr(403, 'Cần đổi mật khẩu tạm trước khi sử dụng');
   return u;
 }
 const needAcc = (u) => { if (!isAcc(u)) throw new HttpErr(403, 'Chỉ kế toán / quản trị'); };
@@ -126,8 +129,9 @@ on('POST', '/api/auth/password', async (req, body, u) => {
   const old = String(body.old || ''), nw = String(body.password || '');
   if (!checkPass(old, u.pass_hash)) throw bad('Mật khẩu hiện tại không đúng');
   if (nw.length < 8) throw bad('Mật khẩu mới tối thiểu 8 ký tự');
-  const { rows } = await q('update users set pass_hash=$2, pass_changed_at=now() where id=$1 returning *', [u.id, hashPass(nw)]);
-  return { token: signToken(rows[0]) };
+  if (nw === old) throw bad('Mật khẩu mới phải khác mật khẩu tạm / mật khẩu cũ');
+  const { rows } = await q('update users set pass_hash=$2, pass_changed_at=now(), must_change=false where id=$1 returning *', [u.id, hashPass(nw)]);
+  return { token: signToken(rows[0]), user: pub(rows[0]) };
 });
 on('PUT', '/api/profile', async (req, body, u) => {
   await q('update users set full_name=$2, dept=$3, position=$4 where id=$1', [u.id, String(body.full_name || u.full_name).slice(0, 120), String(body.dept || '').slice(0, 120), String(body.position || '').slice(0, 120)]);
@@ -244,7 +248,7 @@ on('GET', '/api/profiles', async (req, body, u) => {
 on('POST', '/api/admin/password', async (req, body, u) => {
   needAcc(u);
   if (!uuidOk(body.user) || String(body.password || '').length < 8) throw bad('Mật khẩu tối thiểu 8 ký tự');
-  const { rowCount } = await q('update users set pass_hash=$2, pass_changed_at=now() where id=$1', [body.user, hashPass(String(body.password))]);
+  const { rowCount } = await q('update users set pass_hash=$2, pass_changed_at=now(), must_change=true where id=$1', [body.user, hashPass(String(body.password))]);
   if (!rowCount) throw bad('Không tìm thấy tài khoản');
   return { ok: true };
 });

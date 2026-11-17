@@ -27,6 +27,9 @@ create table if not exists records (
   data jsonb not null,
   primary key (owner, id)
 );
+-- mật khẩu tạm (tạo bằng cli.js / kế toán cấp lại) → bắt buộc đổi ở lần đăng nhập đầu
+alter table users add column if not exists must_change boolean not null default false;
+
 create index if not exists records_owner_kind on records (owner, kind);
 create index if not exists records_kind on records (kind);
 

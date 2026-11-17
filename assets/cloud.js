@@ -41,7 +41,7 @@
     return j || {};
   }
   Cloud.api = api;
-  function toUser(u) { return u ? { id: u.id, email: u.email, role: u.role, blocked: !!u.blocked, user_metadata: { full_name: u.full_name || '', dept: u.dept || '' } } : null; }
+  function toUser(u) { return u ? { id: u.id, email: u.email, role: u.role, blocked: !!u.blocked, mustChange: !!u.must_change, user_metadata: { full_name: u.full_name || '', dept: u.dept || '' } } : null; }
   function setSession(res) {
     Cloud.token = res.token || Cloud.token; Cloud.user = toUser(res.user);
     try { localStorage.setItem(TOKEN_KEY, Cloud.token); localStorage.setItem(USER_KEY, JSON.stringify(res.user)); } catch (e) {}
@@ -381,6 +381,8 @@
     }
     if (!Cloud._interval) Cloud._interval = setInterval(() => { Cloud.maybeSync(); }, 60000);
     try { await ensureClient(); } catch (e) { setState('error'); }
+    // phiên cũ còn đang dùng mật khẩu tạm → đăng nhập lại để đổi mật khẩu
+    if (Cloud.user && Cloud.user.mustChange) { Cloud.user = null; Cloud.token = ''; try { localStorage.removeItem(TOKEN_KEY); } catch (e) {} }
     if (Cloud.user) {
       // đã có phiên lưu trên máy (kể cả offline) → vào thẳng app
       await enforceAccount(Cloud.user.id);
@@ -459,6 +461,8 @@
       } else {
         await signIn(email, pass);
       }
+      // mật khẩu tạm (do quản trị / kế toán cấp) → bắt buộc đặt mật khẩu mới trước khi vào app
+      if (Cloud.user && Cloud.user.mustChange) await forceChange(pass);
       await onSignedIn();
     } catch (e) {
       const m = String(e.message || e);
@@ -467,6 +471,32 @@
     }
   }
 
+  // Bắt buộc đổi mật khẩu tạm: hộp thoại không đóng được, đổi xong mới vào app
+  function forceChange(oldPass) {
+    return new Promise((resolve) => {
+      const ov = App.openSheet('<div class="sheet-h"><div><div class="st">Đặt mật khẩu mới</div><div class="ss">Bạn đang dùng mật khẩu tạm — hãy đặt mật khẩu riêng để tiếp tục</div></div></div>' +
+        '<div class="alert info" style="margin-bottom:12px">' + I('key') + '<div>Mật khẩu mới tối thiểu 8 ký tự, khác mật khẩu tạm. Nên có chữ hoa, chữ thường, số và ký tự đặc biệt.</div></div>' +
+        App.ui.text('fc-pass', 'Mật khẩu mới', '', { type: 'password', auto: 'new-password' }) +
+        App.ui.text('fc-pass2', 'Nhập lại mật khẩu mới', '', { type: 'password', auto: 'new-password' }) +
+        '<div class="sheet-f"><button class="btn ghost" id="fc-out">Đăng xuất</button><button class="btn" id="fc-ok">' + I('check') + 'Lưu và vào app</button></div>', { center: true, dismiss: false });
+      const ok = ov.querySelector('#fc-ok');
+      ov.querySelector('#fc-out').onclick = async () => { App.closeSheet(ov); await signOut(); App.afterLogout(); };
+      const go = async () => {
+        const p = ov.querySelector('#fc-pass').value, p2 = ov.querySelector('#fc-pass2').value;
+        if (p.length < 8) { App.toast('Mật khẩu mới tối thiểu 8 ký tự', 'err'); return; }
+        if (p !== p2) { App.toast('Hai lần nhập không khớp', 'err'); return; }
+        if (p === oldPass) { App.toast('Mật khẩu mới phải khác mật khẩu tạm', 'err'); return; }
+        ok.disabled = true;
+        try {
+          const r = await api('POST', '/auth/password', { old: oldPass, password: p });
+          setSession(r);
+          App.closeSheet(ov); App.toast('Đã đặt mật khẩu mới', 'ok'); resolve();
+        } catch (e) { ok.disabled = false; App.toast(e.message || String(e), 'err'); }
+      };
+      ok.onclick = go;
+      ov.querySelector('#fc-pass2').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    });
+  }
   function openNewPassword() {
     const ov = App.openSheet(App.sheetHead('Đổi mật khẩu') + App.ui.text('np-old', 'Mật khẩu hiện tại', '', { type: 'password', auto: 'current-password' }) +
       App.ui.text('np-pass', 'Mật khẩu mới (tối thiểu 8 ký tự)', '', { type: 'password', auto: 'new-password' }) +
@@ -476,7 +506,7 @@
       const o = ov.querySelector('#np-old').value, p = ov.querySelector('#np-pass').value, p2 = ov.querySelector('#np-pass2').value;
       if (p.length < 8) { App.toast('Mật khẩu mới tối thiểu 8 ký tự', 'err'); return; }
       if (p !== p2) { App.toast('Hai lần nhập mật khẩu mới không khớp', 'err'); return; }
-      try { const r = await api('POST', '/auth/password', { old: o, password: p }); Cloud.token = r.token; try { localStorage.setItem(TOKEN_KEY, r.token); } catch (e) {} App.closeSheet(ov); App.toast('Đã đổi mật khẩu', 'ok'); }
+      try { const r = await api('POST', '/auth/password', { old: o, password: p }); setSession(r); App.closeSheet(ov); App.toast('Đã đổi mật khẩu', 'ok'); }
       catch (e) { App.toast(e.message || String(e), 'err'); }
     };
   }

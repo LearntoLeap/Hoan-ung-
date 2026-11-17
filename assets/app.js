@@ -206,6 +206,7 @@
     ov.className = 'overlay';
     ov.innerHTML = '<div class="sheet ' + (opts.center ? 'center ' : '') + (opts.wide ? 'wide' : '') + '" role="dialog" aria-modal="true"><div class="grip"></div>' + html + '</div>';
     root.appendChild(ov);
+    if (opts.dismiss === false) ov.dataset.nodismiss = '1';
     ov.addEventListener('mousedown', (e) => { if (e.target === ov && opts.dismiss !== false) closeSheet(ov); });
     requestAnimationFrame(() => ov.classList.add('show'));
     const f = ov.querySelector('input:not([type=hidden]),textarea,select');
@@ -241,7 +242,7 @@
       if (pop) { pop.classList.remove('open'); return; }
       const cf = document.getElementById('cfg'); if (cf && cf.classList.contains('open')) { cf.classList.remove('open'); return; }
       if (document.body.classList.contains('nav-open')) { document.body.classList.remove('nav-open'); return; }
-      if (document.querySelector('#modal-root .overlay')) closeSheet();
+      { const all = document.querySelectorAll('#modal-root .overlay'), top = all[all.length - 1]; if (top && !top.dataset.nodismiss) closeSheet(top); }
     }
   });
 
