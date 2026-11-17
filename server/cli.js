@@ -1,7 +1,7 @@
 /* =========================================================================
    Tạo / đặt lại mật khẩu tài khoản — chạy trên VPS:
      docker compose exec api node cli.js account learntoleap.2023@gmail.com "Quản trị Learn to Leap"
-     docker compose exec api node cli.js account ketoan@learntoleap.vn "Kế toán Learn to Leap"
+     docker compose exec api node cli.js account phanthao27070202@gmail.com "Kế toán Learn to Leap"
    Mật khẩu được hỏi khi chạy (gõ ẩn), chỉ lưu dạng mã băm trong cơ sở dữ liệu.
    Chạy lại = đặt mật khẩu mới.
    ========================================================================= */

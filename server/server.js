@@ -16,7 +16,7 @@ const PORT = +process.env.PORT || 3000;
 const WEB_DIR = path.resolve(process.env.WEB_DIR || path.join(__dirname, '..'));
 const SECRET = process.env.APP_SECRET || '';
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'learntoleap.2023@gmail.com').toLowerCase();
-const KETOAN_EMAIL = (process.env.KETOAN_EMAIL || 'ketoan@learntoleap.vn').toLowerCase();
+const KETOAN_EMAIL = (process.env.KETOAN_EMAIL || 'phanthao27070202@gmail.com').toLowerCase();
 const TOKEN_DAYS = +process.env.TOKEN_DAYS || 30;
 if (SECRET.length < 32) { console.error('APP_SECRET phải dài ít nhất 32 ký tự'); process.exit(1); }
 

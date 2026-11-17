@@ -40,7 +40,7 @@ services:
       DATABASE_URL: postgres://ltl_payment:${POSTGRES_PASSWORD}@db:5432/ltl_payment
       APP_SECRET: ${APP_SECRET}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-learntoleap.2023@gmail.com}
-      KETOAN_EMAIL: ${KETOAN_EMAIL:-ketoan@learntoleap.vn}
+      KETOAN_EMAIL: ${KETOAN_EMAIL:-phanthao27070202@gmail.com}
       ALLOWED_DOMAINS: ${ALLOWED_DOMAINS:-}
     volumes:
       - ..:/web:ro
